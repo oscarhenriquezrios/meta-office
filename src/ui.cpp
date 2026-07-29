@@ -167,6 +167,58 @@ void drawLlmConfigPanel() {
     }
 }
 
+void drawChatPanel(const std::vector<Entity>& entities) {
+    if (!g_showChat) return;
+
+    Entity* target = nullptr;
+    for (auto& e : entities) if (e.id == g_chatTargetId) { target = const_cast<Entity*>(&e); break; }
+    if (!target) { closeChat(); return; }
+
+    int pw = 420, ph = 400;
+    int px = (screenW - pw) / 2;
+    int py = (screenH - ph) / 2 - 30;
+
+    // Fondo
+    DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 160));
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,240});
+    DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, alpha(target->color, 150));
+
+    // Header con nombre del agente
+    DrawRectangle(px, py, pw, 40, alpha(target->color, 40));
+    DrawText(TextFormat("💬 Chat con %s", target->name.c_str()), px + 14, py + 10, 14, WHITE);
+    // Botón cerrar
+    Rectangle btnClose = {(float)px + pw - 36, (float)py + 4, 30, 30};
+    DrawRectangleRounded(btnClose, 0.2f, 4, alpha(RED, 80));
+    DrawText("✕", btnClose.x + 7, btnClose.y + 4, 16, WHITE);
+    if (CheckCollisionPointRec(GetMousePosition(), btnClose) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        closeChat(); return;
+    }
+
+    int yy = py + 48;
+
+    // Mostrar mensajes previos
+    DrawRectangle(px + 10, yy, pw - 20, ph - 130, alpha(BLACK, 80));
+    int msgY = yy + 6;
+    int maxMsg = ph - 140;
+    int start = std::max(0, (int)g_chatHistory.size() - 20);
+    // Scrollbar si hay muchos mensajes
+    for (int i = start; i < (int)g_chatHistory.size(); i++) {
+        if (msgY - yy > maxMsg) break;
+        bool isAgent = (g_chatHistory[i].first == "assistant");
+        Color bg = isAgent ? alpha(target->color, 20) : alpha({56,189,248}, 15);
+        DrawRectangleRounded({(float)px + 14, (float)msgY, (float)pw - 28, 22}, 0.2f, 4, bg);
+        DrawText(g_chatHistory[i].second.c_str(), px + 20, msgY + 4, 10,
+                 isAgent ? WHITE : (Color){148,163,184,255});
+        msgY += 26;
+    }
+
+    // Input box
+    int iy = py + ph - 70;
+    DrawRectangle(px + 10, iy, pw - 20, 28, alpha(WHITE, 10));
+    DrawRectangleLines(px + 10, iy, pw - 20, 28, alpha(WHITE, 30));
+    DrawText(g_chatInput.c_str(), px + 16, iy + 6, 11, WHITE);
+}
+
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
             int selectedId, bool paused) {
     // ===== TOP BAR =====
@@ -261,10 +313,41 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
 
     // ===== LLM Config Panel (overlay) =====
     drawLlmConfigPanel();
+
+    // ===== Chat Panel =====
+    drawChatPanel(entities);
 }
 
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
                  int& selectedId, bool& paused, float& panY) {
+    // Si el chat está abierto, el input va al chat
+    if (g_showChat) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            if (key >= 32 && key <= 126 && g_chatInput.size() < 200)
+                g_chatInput += (char)key;
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && !g_chatInput.empty())
+            g_chatInput.pop_back();
+        if (IsKeyPressed(KEY_ENTER) && !g_chatInput.empty()) {
+            // Enviar mensaje al LLM
+            Entity* target = nullptr;
+            for (auto& e : entities) if (e.id == g_chatTargetId) { target = &e; break; }
+            if (target && !g_llmConfig.apiKey.empty() && g_llmConfig.apiKey != "sk-...") {
+                g_chatHistory.push_back({"user", g_chatInput});
+                g_chatHistory.push_back({"assistant", "🧠 pensando..."});
+                // Encolar con historial completo como contexto
+                std::string fullPrompt = g_chatInput;
+                std::lock_guard<std::mutex> lock(g_llmMutex);
+                g_llmQueue.push({g_chatTargetId, getSystemPrompt(target->type), fullPrompt, GetTime() + 15.0});
+            }
+            g_chatInput.clear();
+        }
+        if (IsKeyPressed(KEY_ESCAPE)) closeChat();
+        return;
+    }
+
     // No procesar input normal si el panel de config está abierto
     if (g_showLlmConfig) {
         // Click en campos de texto para activar edición
@@ -342,7 +425,7 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
                 for (auto& e : entities) {
                     if (e.type == EntityType::Human) continue;
                     float d = sqrtf(powf(e.renderX - gx, 2) + powf(e.renderY - gy, 2));
-                    if (d < 1.5f) { selectedId = e.id; clickedAgent = true; break; }
+                    if (d < 1.5f) { selectedId = e.id; openChat(e.id); clickedAgent = true; break; }
                 }
                 if (!clickedAgent && human) {
                     human->targetX = gx; human->targetY = gy;
@@ -354,7 +437,7 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
         int sx = screenW - 300;
         for (int i = 0; i < (int)entities.size(); i++) {
             Rectangle card = {(float)sx + 10, (float)(80 + i * 64), 280, 58};
-            if (CheckCollisionPointRec(mp, card)) { selectedId = entities[i].id; break; }
+            if (CheckCollisionPointRec(mp, card)) { selectedId = entities[i].id; openChat(entities[i].id); break; }
         }
     }
 

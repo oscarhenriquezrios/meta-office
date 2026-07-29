@@ -6,6 +6,10 @@
 
 LLMConfig g_llmConfig;
 bool g_showLlmConfig = false;
+bool g_showChat = false;
+int g_chatTargetId = -1;
+std::vector<std::pair<std::string, std::string>> g_chatHistory;
+std::string g_chatInput;
 
 // Cola de LLM async
 std::queue<LlmRequest> g_llmQueue;
@@ -339,6 +343,14 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
             for (auto& e : entities) {
                 if (e.id == res.entityId) {
                     e.speech = {res.text, res.expiryTime};
+                    // Si el chat está abierto con este agente, agregar al historial
+                    if (g_showChat && g_chatTargetId == res.entityId && !g_chatHistory.empty()) {
+                        // Reemplazar el último "🧠 pensando..." con la respuesta real
+                        if (!g_chatHistory.empty() && g_chatHistory.back().second == "🧠 pensando...")
+                            g_chatHistory.back().second = res.text;
+                        else
+                            g_chatHistory.push_back({"assistant", res.text});
+                    }
                     break;
                 }
             }
@@ -354,4 +366,18 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
     }
 
     while (logs.size() > 40) logs.erase(logs.begin());
+}
+
+void openChat(int entityId) {
+    g_chatTargetId = entityId;
+    g_chatHistory.clear();
+    g_chatInput.clear();
+    g_showChat = true;
+}
+
+void closeChat() {
+    g_showChat = false;
+    g_chatTargetId = -1;
+    g_chatHistory.clear();
+    g_chatInput.clear();
 }

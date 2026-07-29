@@ -102,3 +102,11 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
             int selectedId, bool paused);
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
                  int& selectedId, bool& paused, float& panY);
+
+// Chat interactivo con agentes
+extern bool g_showChat;
+extern int g_chatTargetId;
+extern std::vector<std::pair<std::string, std::string>> g_chatHistory;
+extern std::string g_chatInput;
+void openChat(int entityId);
+void closeChat();
