@@ -29,11 +29,11 @@ void drawLlmConfigPanel() {
     if (!g_showLlmConfig) return;
 
     // Fondo semi-transparente
-    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, alpha(BLACK, 180));
+    DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 180));
 
     int pw = 520, ph = 380;
-    int px = (SCREEN_W - pw) / 2;
-    int py = (SCREEN_H - ph) / 2;
+    int px = (screenW - pw) / 2;
+    int py = (screenH - ph) / 2;
 
     DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,240});
     DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {56,189,248,100});
@@ -169,8 +169,8 @@ void drawLlmConfigPanel() {
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
             int selectedId, bool paused) {
     // ===== TOP BAR =====
-    DrawRectangle(0, 0, SCREEN_W, 50, {15,23,42,220});
-    DrawLine(0, 50, SCREEN_W, 50, {255,255,255,20});
+    DrawRectangle(0, 0, screenW, 50, {15,23,42,220});
+    DrawLine(0, 50, screenW, 50, {255,255,255,20});
 
     DrawText("META-OFFICE 2D", 20, 14, 20, WHITE);
     DrawText("SIMULACION META-OPERATIVA C++", 180, 18, 12, {148,163,184,255});
@@ -189,12 +189,12 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
         DrawText(TextFormat("Pos: (%.0f, %.0f)", h.x, h.y), 470, 18, 12, {148,163,184,255});
     }
 
-    DrawCircle(SCREEN_W - 240, 16, 5, paused ? ORANGE : GREEN);
-    DrawText(paused ? "PAUSADO" : "EN TIEMPO REAL", SCREEN_W - 230, 12, 12,
+    DrawCircle(screenW - 240, 16, 5, paused ? ORANGE : GREEN);
+    DrawText(paused ? "PAUSADO" : "EN TIEMPO REAL", screenW - 230, 12, 12,
              paused ? ORANGE : GREEN);
 
     // Botón Config LLM (engranaje)
-    Rectangle btnConfig = {(float)SCREEN_W - 170, 8, 40, 34};
+    Rectangle btnConfig = {(float)screenW - 170, 8, 40, 34};
     DrawRectangleRounded(btnConfig, 0.2f, 4, g_showLlmConfig ? alpha({56,189,248}, 60) : alpha(WHITE, 10));
     DrawRectangleRoundedLines(btnConfig, 0.2f, 4, g_showLlmConfig ? (Color){56,189,248,200} : alpha(WHITE, 30));
     DrawText("⚙️", btnConfig.x + 6, btnConfig.y + 3, 20, WHITE);
@@ -203,14 +203,14 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     }
 
     // Botón Pausar
-    DrawRectangle(SCREEN_W - 120, 8, 110, 34, paused ? (Color){245,158,11,60} : (Color){255,255,255,20});
-    DrawRectangleLines(SCREEN_W - 120, 8, 110, 34, {255,255,255,40});
-    DrawText(paused ? "REANUDAR" : "PAUSAR", SCREEN_W - 90, 16, 14, WHITE);
+    DrawRectangle(screenW - 120, 8, 110, 34, paused ? (Color){245,158,11,60} : (Color){255,255,255,20});
+    DrawRectangleLines(screenW - 120, 8, 110, 34, {255,255,255,40});
+    DrawText(paused ? "REANUDAR" : "PAUSAR", screenW - 90, 16, 14, WHITE);
 
     // ===== SIDEBAR =====
-    int sx = SCREEN_W - 300;
-    DrawRectangle(sx, 50, 300, SCREEN_H - 50, {10,14,23,200});
-    DrawLine(sx, 50, sx, SCREEN_H, {255,255,255,15});
+    int sx = screenW - 300;
+    DrawRectangle(sx, 50, 300, screenH - 50, {10,14,23,200});
+    DrawLine(sx, 50, sx, screenH, {255,255,255,15});
 
     DrawText("MIEMBROS", sx + 12, 58, 14, {148,163,184,255});
     DrawText(TextFormat("(%zu)", entities.size()), sx + 100, 58, 14, {100,116,139,255});
@@ -255,8 +255,8 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     }
 
     // ===== HUD =====
-    DrawRectangle(10, SCREEN_H - 40, 500, 30, alpha(BLACK, 150));
-    DrawText("WASD: mover | Clic: inspeccionar | P: pausar | ⚙️: config LLM", 18, SCREEN_H - 33, 12, {148,163,184,255});
+    DrawRectangle(10, screenH - 40, 500, 30, alpha(BLACK, 150));
+    DrawText("WASD: mover | Clic: inspeccionar | P: pausar | ⚙️: config LLM", 18, screenH - 33, 12, {148,163,184,255});
 
     // ===== LLM Config Panel (overlay) =====
     drawLlmConfigPanel();
@@ -270,8 +270,8 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 mp = GetMousePosition();
             int pw = 520;
-            int px = (SCREEN_W - pw) / 2;
-            int py = (SCREEN_H - 380) / 2;
+            int px = (screenW - pw) / 2;
+            int py = (screenH - 380) / 2;
             int labelW = 130;
             int yy = py + 64;
 
@@ -304,7 +304,7 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
     // Botón ⚙️ en top bar
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mp = GetMousePosition();
-        Rectangle btnConfig = {(float)SCREEN_W - 170, 8, 40, 34};
+        Rectangle btnConfig = {(float)screenW - 170, 8, 40, 34};
         if (CheckCollisionPointRec(mp, btnConfig)) {
             toggleLlmConfig();
             return;
@@ -327,8 +327,8 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mp = GetMousePosition();
 
-        if (mp.x < SCREEN_W - 300) {
-            Rectangle btnPause = {(float)SCREEN_W - 120, 8, 110, 34};
+        if (mp.x < screenW - 300) {
+            Rectangle btnPause = {(float)screenW - 120, 8, 110, 34};
             if (CheckCollisionPointRec(mp, btnPause)) {
                 paused = !paused;
                 return;
@@ -350,7 +350,7 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
             }
         }
 
-        int sx = SCREEN_W - 300;
+        int sx = screenW - 300;
         for (int i = 0; i < (int)entities.size(); i++) {
             Rectangle card = {(float)sx + 10, (float)(80 + i * 64), 280, 58};
             if (CheckCollisionPointRec(mp, card)) { selectedId = entities[i].id; break; }

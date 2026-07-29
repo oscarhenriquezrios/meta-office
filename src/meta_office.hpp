@@ -9,12 +9,16 @@
 #include "llm_client.hpp"
 
 // Config
-constexpr int SCREEN_W = 1280;
-constexpr int SCREEN_H = 720;
+constexpr int SCREEN_W_DEF = 1280;
+constexpr int SCREEN_H_DEF = 720;
 constexpr int TILE_W = 64;
 constexpr int TILE_H = 32;
 constexpr int GRID_W = 16;
 constexpr int GRID_H = 16;
+
+// Tamaño dinámico de pantalla (se actualiza al redimensionar)
+extern int screenW;
+extern int screenH;
 
 enum class EntityType { Human, CodeBot, DataBot, Orchestrator };
 enum class Status { Idle, Walking, Busy, Error, Intervening };

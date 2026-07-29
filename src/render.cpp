@@ -258,7 +258,7 @@ void drawScene(const std::vector<Entity>& entities, Vector2 origin, double time)
     DrawEllipse(gridToIso(2, 11, origin).x, gridToIso(2, 11, origin).y+4, 24, 12, alpha({100,60,180}, 20));
     DrawEllipse(gridToIso(10, 10, origin).x, gridToIso(10, 10, origin).y+4, 30, 14, alpha({80,50,20}, 25));
 
-    // Furniture
+    // Furniture (posiciones relativas al tamaño de pantalla)
     drawDesk(gridToIso(3, 3, origin), {56,189,248,255});
     drawDesk(gridToIso(12, 4, origin), {16,185,129,255});
     drawServerRack(gridToIso(12, 2, origin));
