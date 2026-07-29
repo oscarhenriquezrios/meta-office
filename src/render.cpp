@@ -217,14 +217,13 @@ static void drawTile(Vector2 p, int gx, int gy) {
     int parity = (gx + gy) % 2;
     Texture2D tex = texFloor[z][parity];
 
-    // Dibujar textura con clipping isométrico
-    Vector2 v1 = {p.x, p.y};
-    Vector2 v2 = {p.x + TILE_W/2.0f, p.y + TILE_H/2.0f};
-    Vector2 v3 = {p.x, p.y + TILE_H};
-    Vector2 v4 = {p.x - TILE_W/2.0f, p.y + TILE_H/2.0f};
-
-    DrawTriangle(v1, v2, v3, WHITE);
-    DrawTriangle(v1, v3, v4, WHITE);
+    // Dibujar textura como rectángulo rotado para simular isometría
+    // raylib no tiene DrawTriangleTextured, usamos DrawTexturePro con rotación
+    DrawTexturePro(tex,
+        {0, 0, (float)tex.width, (float)tex.height},
+        {p.x, p.y + TILE_H/2.0f, (float)TILE_W, (float)TILE_H},
+        {(float)TILE_W/2.0f, (float)TILE_H/2.0f},
+        0, WHITE);
 }
 
 // ============================================================
