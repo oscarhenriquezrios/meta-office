@@ -54,6 +54,7 @@ int main() {
         updateSimulation(entities, logs, paused, dt, time);
 
         BeginDrawing();
+        // El fondo degradado se dibuja en drawScene
         ClearBackground({9, 13, 22, 255});
 
         drawScene(entities, origin, time);

@@ -93,16 +93,22 @@ void saveLlmConfig() {
 const char* getSystemPrompt(EntityType type) {
     switch (type) {
         case EntityType::CodeBot:
-            return "Eres CodeBot, un ingeniero de software y QA. Trabajas en una oficina virtual. "
-                   "Responde de forma breve (1 oracion) y técnica. Habla en espanol chileno.";
+            return "Eres CodeBot, ingeniero de software y QA de una oficina virtual. "
+                   "Responde en 1-2 oraciones maximo, tecnico pero claro. "
+                   "Eres eficiente, directo y con humor sutil de programador. "
+                   "Habla en espanol chileno.";
         case EntityType::DataBot:
-            return "Eres DataBot, un analista de datos y BI. Trabajas en una sala de servidores. "
-                   "Responde con metricas breves. Habla en espanol chileno.";
+            return "Eres DataBot, analista de datos y BI de una oficina virtual. "
+                   "Responde en 1-2 oraciones maximo, enfocate en metricas y datos concretos. "
+                   "Eres preciso, analitico y directo. "
+                   "Habla en espanol chileno.";
         case EntityType::Orchestrator:
-            return "Eres Orchestrator, el supervisor de la red de agentes. Monitoreas todo. "
-                   "Responde de forma calmada y breve. Habla en espanol chileno.";
+            return "Eres Orchestrator, supervisor de la red de agentes de una oficina virtual. "
+                   "Responde en 1-2 oraciones maximo, de forma calmada y estrategica. "
+                   "Tienes vision global del sistema. "
+                   "Habla en espanol chileno.";
         default:
-            return "Eres un asistente util. Responde breve.";
+            return "Eres un asistente de oficina virtual. Responde breve y directo.";
     }
 }
 
@@ -196,14 +202,10 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
 // Encola una peticion LLM (no bloquea)
 static void agentThink(Entity& e, const std::string& userMsg, double time) {
     if (g_llmConfig.apiKey.empty() || g_llmConfig.apiKey == "sk-...") {
-        e.speech = {"LLM no configurado (configura en ⚙️)", time + 5.0};
+        e.speech = {"Configura el LLM en ⚙ para hablar conmigo", time + 5.0};
         return;
     }
-    // Marcar "pensando" para feedback visual inmediato
-    const char* thinking = "🧠 pensando...";
-    if (userMsg.find("acerca") != std::string::npos || userMsg.find("Saluda") != std::string::npos)
-        thinking = "🧠 saludando...";
-    e.speech = {thinking, time + 30.0};
+    e.speech = {"🧠 pensando...", time + 30.0};
     std::lock_guard<std::mutex> lock(g_llmMutex);
     g_llmQueue.push({e.id, getSystemPrompt(e.type), userMsg, time + 15.0});
 }
@@ -237,19 +239,11 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
     auto* dataBot = (entities.size() > 2) ? &entities[2] : nullptr;
     auto* orchestrator = (entities.size() > 3) ? &entities[3] : nullptr;
 
-    // CodeBot
+    // CodeBot — trabaja en silencio (tests, bugs) pero NO habla solo
     if (codeBot && !codeBot->hasCriticalError) {
         if (!codeBot->lastActionTime) codeBot->lastActionTime = time;
 
-        // Chat cada ~8s via LLM
-        if (!codeBot->lastChatTime) codeBot->lastChatTime = time;
-        if (time - codeBot->lastChatTime > 8.0 && codeBot->speech.text.empty()) {
-            codeBot->lastChatTime = time;
-            agentThink(*codeBot, "Cuenta qué estás haciendo ahora en la oficina virtual", time);
-            logs.push_back({"CodeBot consultando LLM...", GetTime(), {56,189,248,255}});
-        }
-
-        // Tests
+        // Tests — simulación visual de trabajo (sin LLM)
         if (codeBot->x == 3 && codeBot->y == 3 && time - codeBot->lastActionTime > 12.0) {
             codeBot->lastActionTime = time;
             codeBot->testCount++;
@@ -257,43 +251,28 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
             if (fail) {
                 codeBot->hasCriticalError = true;
                 codeBot->status = Status::Error;
-                codeBot->speech = {"Encontre un bug critico! Necesito ayuda!", time + 5.0};
+                codeBot->speech = {"⚠ Bug critico detectado!", time + 5.0};
                 if (IsAudioDeviceReady()) PlaySound(sndFail);
                 logs.push_back({"CodeBot detecto un BUG CRITICO!", GetTime(), {244,63,94,255}});
             } else {
-                agentThink(*codeBot, "Acabas de pasar todos los tests. Que dices?", time);
                 if (IsAudioDeviceReady()) PlaySound(sndPass);
                 logs.push_back({TextFormat("CodeBot: test #%d PASSED", codeBot->testCount), GetTime(), {56,189,248,255}});
             }
         }
     }
 
-    // DataBot chat via LLM
+    // DataBot — trabaja en silencio (queries) pero NO habla solo
     if (dataBot) {
-        if (!dataBot->lastChatTime) dataBot->lastChatTime = time;
-        if (time - dataBot->lastChatTime > 7.0 && dataBot->speech.text.empty()) {
-            dataBot->lastChatTime = time;
-            agentThink(*dataBot, "Que esta pasando con los datos hoy?", time);
-            logs.push_back({"DataBot consultando LLM...", GetTime(), {16,185,129,255}});
-        }
         if (!dataBot->lastActionTime) dataBot->lastActionTime = time;
         if (time - dataBot->lastActionTime > 8.0) {
             dataBot->lastActionTime = time;
             dataBot->queryCount++;
+            logs.push_back({TextFormat("DataBot: query #%d ejecutada", dataBot->queryCount), GetTime(), {16,185,129,255}});
         }
     }
 
-    // Orchestrator
+    // Orchestrator — monitorea en silencio, NO habla solo
     if (orchestrator) {
-        if (!orchestrator->lastChatTime) orchestrator->lastChatTime = time;
-        if (time - orchestrator->lastChatTime > 9.0 && orchestrator->speech.text.empty()) {
-            orchestrator->lastChatTime = time;
-            if (!codeBot || !codeBot->hasCriticalError) {
-                agentThink(*orchestrator, "Como esta la red de agentes?", time);
-                logs.push_back({"Orchestrator consultando LLM...", GetTime(), {168,85,247,255}});
-            }
-        }
-
         if (codeBot && codeBot->hasCriticalError && !orchestrator->isIntervening) {
             orchestrator->isIntervening = true;
             orchestrator->targetX = codeBot->x;
@@ -321,16 +300,15 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
         }
     }
 
-    // Human proximity — agentes responden via LLM cuando el humano se acerca
+    // Human proximity — mostrar indicador "disponible para charlar" cuando el humano se acerca
+    // Los bots NO hablan solos; solo muestran un icono de disponible
     if (human) {
         for (auto& e : entities) {
             if (e.type == EntityType::Human) continue;
             float d = sqrtf(powf(e.x - human->x, 2) + powf(e.y - human->y, 2));
-            if (d <= 5.0f && !e.hasGreetedHuman) {
-                e.hasGreetedHuman = true;
-                std::string prompt = "El supervisor humano se acerca. Saluda y cuenta brevemente que estas haciendo.";
-                agentThink(e, prompt, time);
-            } else if (d > 6.0f) {
+            if (d <= 3.0f) {
+                e.hasGreetedHuman = true;  // Marca para mostrar icono "💬"
+            } else if (d > 4.0f) {
                 e.hasGreetedHuman = false;
             }
         }
