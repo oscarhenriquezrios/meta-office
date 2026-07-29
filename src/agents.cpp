@@ -3,6 +3,7 @@
 #include <ctime>
 
 LLMConfig g_llmConfig;
+bool g_showLlmConfig = false;
 
 const char* getSystemPrompt(EntityType type) {
     switch (type) {

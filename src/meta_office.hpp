@@ -60,6 +60,9 @@ inline Color alpha(Color c, int a) { return {c.r, c.g, c.b, (unsigned char)a}; }
 // Config LLM global
 extern LLMConfig g_llmConfig;
 
+// Menu de config LLM
+extern bool g_showLlmConfig;
+
 const char* getSystemPrompt(EntityType type);
 
 void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs);
