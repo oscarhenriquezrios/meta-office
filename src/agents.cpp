@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
+#include <chrono>
 
 LLMConfig g_llmConfig;
 bool g_showLlmConfig = false;
@@ -31,9 +32,13 @@ static void llmWorker() {
             std::string reply = llmChat(g_llmConfig, msgs);
             if (reply.empty()) reply = "...";
             if (reply.size() > 120) reply = reply.substr(0, 117) + "...";
+            double expiry = req.expiryTime;
+            // Si la respuesta llega después del expiry original, darle 8s extra
+            double now = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            if (now > expiry) expiry = now + 8.0;
             {
                 std::lock_guard<std::mutex> lock(g_llmMutex);
-                g_llmResults.push_back({req.entityId, reply, req.expiryTime});
+                g_llmResults.push_back({req.entityId, reply, expiry});
             }
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -190,8 +195,13 @@ static void agentThink(Entity& e, const std::string& userMsg, double time) {
         e.speech = {"LLM no configurado (configura en ⚙️)", time + 5.0};
         return;
     }
+    // Marcar "pensando" para feedback visual inmediato
+    const char* thinking = "🧠 pensando...";
+    if (userMsg.find("acerca") != std::string::npos || userMsg.find("Saluda") != std::string::npos)
+        thinking = "🧠 saludando...";
+    e.speech = {thinking, time + 30.0};
     std::lock_guard<std::mutex> lock(g_llmMutex);
-    g_llmQueue.push({e.id, getSystemPrompt(e.type), userMsg, time + 5.0});
+    g_llmQueue.push({e.id, getSystemPrompt(e.type), userMsg, time + 15.0});
 }
 
 void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs,
