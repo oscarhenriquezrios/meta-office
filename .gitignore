@@ -1,0 +1,41 @@
+# Meta-Office .gitignore
+
+# Binarios compilados
+*.o
+*.obj
+meta-office
+meta-office.exe
+
+# Dependencias compiladas
+*.a
+*.lib
+*.dll
+*.dylib
+*.so
+
+# Directorios de build
+build/
+cmake-build-*/
+out/
+
+# Raylib (se instala por separado)
+/raylib-*/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archivos comprimidos (excepto releases oficiales)
+*.tar.gz
+*.zip
+*.tar
+
+# Logs
+*.log
