@@ -19,20 +19,190 @@ Vector2 isoToGrid(float sx, float sy, Vector2 origin) {
 }
 
 // ============================================================
-// Tile drawing
+// Texturas procedurales generadas al cargar
+// ============================================================
+static Texture2D texFloor[4][2];  // [zona][paridad]
+static Texture2D texDesk, texServer, texMeeting, texLounge, texWhiteboard, texClock, texPlant, texFrame;
+static bool texturesLoaded = false;
+
+static void initTextures() {
+    if (texturesLoaded) return;
+
+    Color zoneColors[4][2] = {
+        {{25, 40, 70, 255}, {18, 30, 55, 255}},    // DEV - azul petróneo
+        {{20, 50, 35, 255}, {14, 38, 25, 255}},    // DATA - verde oscuro
+        {{45, 25, 60, 255}, {35, 18, 48, 255}},    // MEETING - púrpura
+        {{55, 38, 18, 255}, {42, 28, 12, 255}}     // LOUNGE - marrón madera
+    };
+
+    // Generar baldosas con patrón de cuadrícula
+    for (int z = 0; z < 4; z++) {
+        for (int p = 0; p < 2; p++) {
+            Image img = GenImageColor(TILE_W, TILE_H, zoneColors[z][p]);
+            // Línea de borde más clara
+            Color edge = ColorBrightness(zoneColors[z][p], 0.15f);
+            ImageDrawRectangle(&img, 0, 0, TILE_W, 1, edge);
+            ImageDrawRectangle(&img, 0, TILE_H-1, TILE_W, 1, edge);
+            ImageDrawRectangle(&img, 0, 0, 1, TILE_H, edge);
+            ImageDrawRectangle(&img, TILE_W-1, 0, 1, TILE_H, edge);
+            // Patrón de textura (puntitos)
+            for (int i = 0; i < 6; i++) {
+                int dx = 6 + (i * 11) % (TILE_W - 12);
+                int dy = 6 + (i * 7) % (TILE_H - 12);
+                ImageDrawPixel(&img, dx, dy, ColorBrightness(zoneColors[z][p], 0.25f));
+            }
+            texFloor[z][p] = LoadTextureFromImage(img);
+            UnloadImage(img);
+        }
+    }
+
+    // --- Escritorio ---
+    {
+        Image img = GenImageColor(44, 32, {0,0,0,0});
+        // Sombra del escritorio con rectángulo
+        ImageDrawRectangle(&img, 2, 22, 40, 8, (Color){0,0,0,80});
+        // Superficie
+        ImageDrawRectangle(&img, 0, 0, 44, 18, (Color){35, 48, 68, 255});
+        // Borde superior claro
+        ImageDrawRectangle(&img, 0, 0, 44, 2, (Color){55, 70, 95, 255});
+        // Monitor izq
+        ImageDrawRectangle(&img, 6, 6, 12, 10, (Color){15, 20, 35, 255});
+        ImageDrawRectangle(&img, 8, 8, 8, 6, (Color){56, 189, 248, 200});
+        // Monitor der
+        ImageDrawRectangle(&img, 26, 6, 12, 10, (Color){15, 20, 35, 255});
+        ImageDrawRectangle(&img, 28, 8, 8, 6, (Color){16, 185, 129, 200});
+        // Teclado
+        ImageDrawRectangle(&img, 10, 16, 24, 3, (Color){60, 70, 90, 200});
+        texDesk = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Rack servidor ---
+    {
+        Image img = GenImageColor(32, 45, {0,0,0,0});
+        ImageDrawRectangle(&img, 0, 0, 32, 45, (Color){15, 23, 42, 255});
+        ImageDrawRectangleLines(&img, (Rectangle){0, 0, 32, 45}, 1, (Color){51, 65, 85, 255});
+        // Ventilación arriba
+        ImageDrawRectangle(&img, 4, 2, 24, 4, (Color){10, 15, 25, 255});
+        for (int i = 0; i < 5; i++) {
+            int y = 10 + i * 7;
+            ImageDrawRectangle(&img, 4, y, 24, 5, (Color){25, 35, 50, 255});
+            ImageDrawCircle(&img, 10, y+2, 1.5f, (Color){16, 185, 129, 255});
+            ImageDrawCircle(&img, 22, y+2, 1.5f, (Color){56, 189, 248, 255});
+        }
+        texServer = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Mesa reuniones ---
+    {
+        Image img = GenImageColor(64, 32, {0,0,0,0});
+        // Sombra
+        ImageDrawRectangle(&img, 4, 24, 56, 8, (Color){0,0,0,60});
+        // Mesa ovalada simulada con rectángulo + bordes circulares
+        ImageDrawRectangle(&img, 4, 10, 56, 12, (Color){45, 55, 75, 255});
+        ImageDrawRectangleLines(&img, (Rectangle){4, 10, 56, 12}, 1, (Color){80, 95, 115, 255});
+        // Holograma centro
+        ImageDrawCircle(&img, 32, 16, 6, (Color){168, 85, 247, 80});
+        texMeeting = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Lounge ---
+    {
+        Image img = GenImageColor(60, 32, {0,0,0,0});
+        // Sombra
+        ImageDrawRectangle(&img, 2, 22, 56, 8, (Color){0,0,0,40});
+        // Mesa
+        ImageDrawRectangle(&img, 18, 10, 24, 8, (Color){80, 55, 40, 255});
+        ImageDrawRectangle(&img, 20, 12, 20, 4, (Color){120, 80, 50, 255});
+        // Taza
+        ImageDrawCircle(&img, 30, 6, 4, (Color){254, 243, 199, 255});
+        ImageDrawCircle(&img, 30, 6, 2, (Color){200, 100, 20, 255});
+        // Maceta
+        ImageDrawRectangle(&img, 44, 10, 8, 10, (Color){120, 80, 50, 255});
+        ImageDrawCircle(&img, 48, 4, 6, (Color){34, 197, 94, 255});
+        texLounge = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Pizarra ---
+    {
+        Image img = GenImageColor(32, 20, {0,0,0,0});
+        ImageDrawRectangle(&img, 0, 0, 32, 20, (Color){45, 55, 75, 255});
+        ImageDrawRectangle(&img, 2, 2, 28, 16, (Color){220, 225, 235, 255});
+        // Notas
+        ImageDrawRectangle(&img, 4, 4, 8, 6, (Color){251, 191, 36, 255});
+        ImageDrawRectangle(&img, 14, 6, 8, 6, (Color){244, 114, 182, 255});
+        ImageDrawRectangle(&img, 20, 10, 8, 5, (Color){56, 189, 248, 255});
+        texWhiteboard = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Reloj ---
+    {
+        Image img = GenImageColor(16, 16, {0,0,0,0});
+        ImageDrawCircle(&img, 8, 8, 7, (Color){25, 35, 50, 255});
+        ImageDrawCircleLines(&img, 8, 8, 7, (Color){60, 75, 95, 255});
+        ImageDrawCircle(&img, 8, 8, 1.5f, (Color){200, 200, 220, 255});
+        texClock = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Planta ---
+    {
+        Image img = GenImageColor(20, 18, {0,0,0,0});
+        ImageDrawRectangle(&img, 6, 8, 8, 10, (Color){120, 80, 50, 255});
+        ImageDrawCircle(&img, 10, 3, 8, (Color){34, 197, 94, 255});
+        ImageDrawCircle(&img, 6, 5, 5, (Color){22, 163, 74, 200});
+        ImageDrawCircle(&img, 14, 4, 5, (Color){22, 163, 74, 200});
+        texPlant = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    // --- Cuadro ---
+    {
+        Image img = GenImageColor(20, 16, {0,0,0,0});
+        ImageDrawRectangle(&img, 0, 0, 20, 16, (Color){60, 40, 70, 255});
+        ImageDrawRectangle(&img, 2, 2, 16, 12, (Color){100, 70, 120, 255});
+        ImageDrawCircle(&img, 10, 8, 3, (Color){80, 50, 100, 255});
+        texFrame = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+
+    texturesLoaded = true;
+}
+
+void unloadTextures() {
+    if (!texturesLoaded) return;
+    for (int z = 0; z < 4; z++)
+        for (int p = 0; p < 2; p++)
+            UnloadTexture(texFloor[z][p]);
+    UnloadTexture(texDesk);
+    UnloadTexture(texServer);
+    UnloadTexture(texMeeting);
+    UnloadTexture(texLounge);
+    UnloadTexture(texWhiteboard);
+    UnloadTexture(texClock);
+    UnloadTexture(texPlant);
+    UnloadTexture(texFrame);
+}
+
+// ============================================================
+// Zonas
 // ============================================================
 struct ZoneDef {
     int xMin, xMax, yMin, yMax;
     const char* name;
-    Color fill, stroke;
-    Color floorEven, floorOdd;
+    Color stroke;
+    int texIdx;
 };
 
 static const ZoneDef zones[] = {
-    {0,7,0,7, "AREA DE DESARROLLO",   {20,40,70,20},  {56,189,248,200},  {17,30,48,255}, {14,24,40,255}},
-    {8,15,0,7, "SALA DE SERVIDORES",  {15,40,25,20},  {16,185,129,200},  {15,36,29,255}, {10,26,21,255}},
-    {0,7,8,15, "SALA DE CONFERENCIAS",{40,20,50,20},  {168,85,247,200},  {31,21,46,255}, {23,15,36,255}},
-    {8,15,8,15, "LOUNGE & CAFETERIA", {50,35,10,20},  {245,158,11,200},  {38,27,17,255}, {30,21,12,255}},
+    {0,7,0,7, "AREA DE DESARROLLO",   {56, 189, 248, 200}, 0},
+    {8,15,0,7, "SALA DE SERVIDORES",  {16, 185, 129, 200}, 1},
+    {0,7,8,15, "SALA DE CONFERENCIAS",{168, 85, 247, 200}, 2},
+    {8,15,8,15, "LOUNGE & CAFETERIA", {245, 158, 11, 200}, 3},
 };
 
 static int getZone(int gx, int gy) {
@@ -44,138 +214,47 @@ static int getZone(int gx, int gy) {
 
 static void drawTile(Vector2 p, int gx, int gy) {
     int z = getZone(gx, gy);
-    Color c = ((gx + gy) % 2 == 0) ? zones[z].floorEven : zones[z].floorOdd;
-    DrawTriangle(p, {p.x+TILE_W/2.0f, p.y+TILE_H/2.0f}, {p.x, p.y+TILE_H}, c);
-    DrawTriangle(p, {p.x, p.y+TILE_H}, {p.x-TILE_W/2.0f, p.y+TILE_H/2.0f}, c);
-    DrawLineEx(p, {p.x+TILE_W/2.0f, p.y+TILE_H/2.0f}, 0.5f, alpha(WHITE, 8));
-    DrawLineEx({p.x+TILE_W/2.0f, p.y+TILE_H/2.0f}, {p.x, p.y+TILE_H}, 0.5f, alpha(WHITE, 8));
-    DrawLineEx({p.x, p.y+TILE_H}, {p.x-TILE_W/2.0f, p.y+TILE_H/2.0f}, 0.5f, alpha(WHITE, 8));
-    DrawLineEx({p.x-TILE_W/2.0f, p.y+TILE_H/2.0f}, p, 0.5f, alpha(WHITE, 8));
+    int parity = (gx + gy) % 2;
+    Texture2D tex = texFloor[z][parity];
+
+    // Dibujar textura con clipping isométrico
+    Vector2 v1 = {p.x, p.y};
+    Vector2 v2 = {p.x + TILE_W/2.0f, p.y + TILE_H/2.0f};
+    Vector2 v3 = {p.x, p.y + TILE_H};
+    Vector2 v4 = {p.x - TILE_W/2.0f, p.y + TILE_H/2.0f};
+
+    DrawTriangle(v1, v2, v3, WHITE);
+    DrawTriangle(v1, v3, v4, WHITE);
 }
 
+// ============================================================
+// Overlay de zona
+// ============================================================
 static void drawZoneOverlay(const ZoneDef& z, Vector2 origin) {
     auto p1 = gridToIso(z.xMin, z.yMin, origin);
     auto p2 = gridToIso(z.xMax+1, z.yMin, origin);
     auto p3 = gridToIso(z.xMax+1, z.yMax+1, origin);
     auto p4 = gridToIso(z.xMin, z.yMax+1, origin);
-    DrawLineEx(p1, p2, 1, z.stroke); DrawLineEx(p2, p3, 1, z.stroke);
-    DrawLineEx(p3, p4, 1, z.stroke); DrawLineEx(p4, p1, 1, z.stroke);
+    DrawLineEx(p1, p2, 1, z.stroke);
+    DrawLineEx(p2, p3, 1, z.stroke);
+    DrawLineEx(p3, p4, 1, z.stroke);
+    DrawLineEx(p4, p1, 1, z.stroke);
     auto lbl = gridToIso(z.xMin+0.5f, z.yMin+0.8f, origin);
-    DrawText(z.name, lbl.x - 40, lbl.y - 6, 10, z.stroke);
+    DrawText(z.name, lbl.x - MeasureText(z.name, 10)/2, lbl.y - 6, 10, z.stroke);
 }
 
 // ============================================================
-// Furniture — versión más detallada
+// Mobiliario con texturas
 // ============================================================
-static void drawDesk(Vector2 pos, Color col) {
-    DrawEllipse(pos.x, pos.y+24, 28, 12, alpha(BLACK, 100));
-    // Mesa con borde
-    DrawRectangle(pos.x-22, pos.y-8, 44, 18, {30,41,59,255});
-    DrawRectangleLines(pos.x-22, pos.y-8, 44, 18, {71,85,105,255});
-    // Base
-    DrawRectangle(pos.x-20, pos.y+10, 40, 4, {20,30,45,255});
-    // Silla
-    DrawRectangle(pos.x+24, pos.y-6, 12, 14, {40,50,70,200});
-    DrawRectangle(pos.x+24, pos.y-12, 12, 4, {56,189,248,100});
-    // Monitor doble
-    DrawRectangle(pos.x-16, pos.y-24, 14, 12, {15,23,42,255});
-    DrawRectangle(pos.x+2, pos.y-24, 14, 12, {15,23,42,255});
-    // Pantallas con brillo
-    DrawRectangle(pos.x-14, pos.y-22, 10, 8, col);
-    DrawRectangle(pos.x+4, pos.y-22, 10, 8, {16,185,129,200});
-    // Teclado
-    DrawRectangle(pos.x-10, pos.y-4, 20, 3, {50,60,80,200});
-}
-
-static void drawServerRack(Vector2 pos) {
-    DrawRectangle(pos.x-16, pos.y-35, 32, 45, {15,23,42,255});
-    DrawRectangleLines(pos.x-16, pos.y-35, 32, 45, {51,65,85,255});
-    // Ventilación
-    DrawRectangle(pos.x-14, pos.y+3, 28, 4, {10,15,25,255});
-    for (int i=0;i<5;i++) {
-        float y = pos.y-30+i*8;
-        DrawRectangle(pos.x-12, y, 24, 5, {30,41,59,255});
-        DrawCircle(pos.x-8, y+2.5f, 1.5f, {16,185,129,255});
-        DrawCircle(pos.x-3, y+2.5f, 1.5f, {56,189,248,255});
-    }
-    // Cable
-    DrawLine(pos.x+16, pos.y+10, pos.x+24, pos.y+16, {100,50,50,200});
-}
-
-static void drawMeetingTable(Vector2 pos) {
-    DrawEllipse(pos.x, pos.y+16, 36, 16, alpha(BLACK, 80));
-    DrawEllipse(pos.x, pos.y, 32, 14, {51,65,85,255});
-    DrawEllipseLines(pos.x, pos.y, 32, 14, {100,116,139,255});
-    DrawCircle(pos.x, pos.y, 8, alpha({168,85,247}, 100));
-    // Sillas alrededor
-    for (int i=0;i<4;i++) {
-        float a = i*3.14159f/2;
-        float sx = pos.x + cosf(a)*22;
-        float sy = pos.y + sinf(a)*12;
-        DrawCircle(sx, sy, 4, {40,50,70,200});
-    }
-    // Proyector (holograma)
-    DrawCircle(pos.x-6, pos.y-12, 3, alpha(RED, 80));
-    DrawCircle(pos.x+6, pos.y-12, 3, alpha(BLUE, 80));
-}
-
-static void drawCoffeeLounge(Vector2 pos) {
-    // Alfombra
-    DrawEllipse(pos.x, pos.y+4, 30, 16, alpha({100,60,20}, 30));
-    // Mesa ratona
-    DrawRectangle(pos.x-12, pos.y-4, 24, 8, {92,64,51,255});
-    DrawRectangle(pos.x-10, pos.y-2, 20, 4, {139,94,60,255});
-    // Taza con café + vapor
-    DrawCircle(pos.x, pos.y-8, 4, {254,243,199,255});
-    DrawCircle(pos.x, pos.y-8, 2, {217,119,6,255});
-    // Maceta grande
-    DrawRectangle(pos.x+18, pos.y-8, 8, 10, {139,94,60,255});
-    DrawCircle(pos.x+22, pos.y-14, 6, {34,197,94,255});
-    // Segunda maceta chica
-    DrawRectangle(pos.x-24, pos.y-4, 6, 8, {120,80,50,255});
-    DrawCircle(pos.x-21, pos.y-10, 4, {34,197,94,200});
-    // Cuadro decorativo en pared
-    DrawRectangle(pos.x-30, pos.y-22, 16, 12, {70,50,90,255});
-    DrawRectangle(pos.x-29, pos.y-21, 14, 10, {100,70,130,255});
-}
-
-static void drawWhiteboard(Vector2 pos) {
-    DrawRectangle(pos.x-16, pos.y-14, 32, 20, {51,65,85,255});
-    DrawRectangle(pos.x-14, pos.y-12, 28, 16, {226,232,240,255});
-    // Notas
-    DrawRectangle(pos.x-10, pos.y-10, 8, 6, {251,191,36,255});
-    DrawRectangle(pos.x+2, pos.y-8, 8, 6, {244,114,182,255});
-    DrawRectangle(pos.x-6, pos.y-2, 8, 5, {56,189,248,255});
-    DrawText("SPRINT", pos.x-8, pos.y+2, 8, {30,41,59,255});
-    DrawText("GOALS", pos.x+4, pos.y+2, 8, {30,41,59,255});
-}
-
-static void drawWallClock(Vector2 pos, double t) {
-    DrawCircle(pos.x, pos.y, 7, {30,41,59,255});
-    DrawCircleLines(pos.x, pos.y, 7, {71,85,105,255});
-    DrawCircle(pos.x, pos.y, 1.5f, {200,200,220,255});
-    float hour = t * 0.05f, min = t * 0.6f;
-    DrawLine(pos.x, pos.y, pos.x+sinf(hour)*3.5f, pos.y-cosf(hour)*3.5f, {148,163,184,255});
-    DrawLine(pos.x, pos.y, pos.x+sinf(min)*4.5f, pos.y-cosf(min)*4.5f, {203,213,225,255});
-}
-
-static void drawPottedPlant(Vector2 pos) {
-    DrawRectangle(pos.x-4, pos.y-2, 8, 10, {139,94,60,255});
-    DrawCircle(pos.x, pos.y-12, 8, {34,197,94,255});
-    DrawCircle(pos.x-4, pos.y-10, 5, {22,163,74,200});
-    DrawCircle(pos.x+4, pos.y-11, 5, {22,163,74,200});
+static void drawFurnitureTex(Vector2 pos, Texture2D tex, Vector2 offset, Color tint) {
+    DrawTexturePro(tex,
+        {0, 0, (float)tex.width, (float)tex.height},
+        {pos.x + offset.x, pos.y + offset.y, (float)tex.width, (float)tex.height},
+        {0, 0}, 0, tint);
 }
 
 // ============================================================
-// Cuadros decorativos
-// ============================================================
-static void drawPictureFrame(Vector2 pos, Color frame, Color inner) {
-    DrawRectangle(pos.x-10, pos.y-12, 20, 16, frame);
-    DrawRectangle(pos.x-8, pos.y-10, 16, 12, inner);
-}
-
-// ============================================================
-// Entity drawing
+// Entity drawing (avatares)
 // ============================================================
 static void drawEntity(const Entity& e, Vector2 pos) {
     float centerY = pos.y + TILE_H/2.0f;
@@ -186,48 +265,49 @@ static void drawEntity(const Entity& e, Vector2 pos) {
 
     switch (e.type) {
         case EntityType::Human: {
-            // Body
-            DrawCircle(pos.x, avY+4, 10, {217,119,6,255});
-            // Head
-            DrawCircle(pos.x, avY-8, 8, {245,158,11,255});
+            // Cuerpo con degradado
+            DrawCircle(pos.x, avY+4, 10, {217, 119, 6, 255});
+            DrawCircle(pos.x, avY-8, 8, {245, 158, 11, 255});
             DrawCircleLines(pos.x, avY-8, 8, WHITE);
-            // Eyes
             DrawCircle(pos.x-3, avY-9, 1.5f, WHITE);
             DrawCircle(pos.x+3, avY-9, 1.5f, WHITE);
+            // Brazo
+            DrawCircle(pos.x-10, avY+2, 3, {200, 100, 10, 200});
+            DrawCircle(pos.x+10, avY+2, 3, {200, 100, 10, 200});
             break;
         }
         case EntityType::CodeBot:
         case EntityType::DataBot: {
-            DrawLine(pos.x, avY-14, pos.x, avY-20, e.color);
+            Color c = e.color;
+            DrawLine(pos.x, avY-14, pos.x, avY-20, c);
             DrawCircle(pos.x, avY-21, 3, WHITE);
-            DrawRectangle(pos.x-10, avY-14, 20, 12, {30,41,59,255});
-            DrawRectangleLines(pos.x-10, avY-14, 20, 12, e.color);
-            Color eye = e.hasCriticalError ? RED : e.color;
+            DrawRectangle(pos.x-10, avY-14, 20, 12, {30, 41, 59, 255});
+            DrawRectangleLines(pos.x-10, avY-14, 20, 12, c);
+            Color eye = e.hasCriticalError ? RED : c;
             DrawRectangle(pos.x-6, avY-10, 4, 4, eye);
             DrawCircle(pos.x-4, avY-8, 1.5f, WHITE);
             DrawRectangle(pos.x+2, avY-10, 4, 4, eye);
             DrawCircle(pos.x+4, avY-8, 1.5f, WHITE);
-            DrawRectangle(pos.x-12, avY, 24, 14, {15,23,42,255});
-            DrawRectangleLines(pos.x-12, avY, 24, 14, e.color);
-            // Detalle pecho
-            DrawRectangle(pos.x-4, avY+4, 8, 3, alpha(e.color, 80));
+            DrawRectangle(pos.x-12, avY, 24, 14, {15, 23, 42, 255});
+            DrawRectangleLines(pos.x-12, avY, 24, 14, c);
+            DrawRectangle(pos.x-4, avY+4, 8, 3, alpha(c, 80));
             break;
         }
-        case EntityType::Orchestrator:
-            // Anillo orbital
-            DrawEllipse(pos.x, avY, 18, 8, alpha({168,85,247}, 40));
-            DrawEllipseLines(pos.x, avY, 18, 8, {168,85,247,100});
-            // Core
-            DrawCircle(pos.x, avY, 10, {126,34,206,255});
-            DrawCircleLines(pos.x, avY, 10, {168,85,247,255});
-            DrawCircle(pos.x, avY-6, 6, {168,85,247,255});
+        case EntityType::Orchestrator: {
+            DrawEllipse(pos.x, avY, 18, 8, alpha({168, 85, 247}, 40));
+            DrawEllipseLines(pos.x, avY, 18, 8, {168, 85, 247, 100});
+            DrawCircle(pos.x, avY, 10, {126, 34, 206, 255});
+            DrawCircleLines(pos.x, avY, 10, {168, 85, 247, 255});
+            DrawCircle(pos.x, avY-6, 6, {168, 85, 247, 255});
             DrawCircleLines(pos.x, avY-6, 6, WHITE);
-            // Punto central
             DrawCircle(pos.x, avY-6, 2, WHITE);
             break;
+        }
     }
 
+    // Nombre con sombra
     int tw = MeasureText(e.name.c_str(), 10);
+    DrawText(e.name.c_str(), pos.x - tw/2 + 1, avY - 25, 10, alpha(BLACK, 100));
     DrawText(e.name.c_str(), pos.x - tw/2, avY - 26, 10, WHITE);
 
     // Speech bubble
@@ -246,36 +326,36 @@ static void drawEntity(const Entity& e, Vector2 pos) {
 // Public drawScene
 // ============================================================
 void drawScene(const std::vector<Entity>& entities, Vector2 origin, double time) {
-    // Tiles
+    if (!texturesLoaded) initTextures();
+
+    // 1. Tiles
     for (int gx = 0; gx < GRID_W; gx++)
         for (int gy = 0; gy < GRID_H; gy++)
             drawTile(gridToIso(gx, gy, origin), gx, gy);
 
-    // Zone overlays
+    // 2. Zone overlays
     for (auto& z : zones) drawZoneOverlay(z, origin);
 
-    // Floor decorations (alfombras en zonas)
-    DrawEllipse(gridToIso(2, 11, origin).x, gridToIso(2, 11, origin).y+4, 24, 12, alpha({100,60,180}, 20));
-    DrawEllipse(gridToIso(10, 10, origin).x, gridToIso(10, 10, origin).y+4, 30, 14, alpha({80,50,20}, 25));
+    // 3. Alfombras decorativas
+    DrawEllipse(gridToIso(2, 11, origin).x, gridToIso(2, 11, origin).y+4, 24, 12, alpha({100, 60, 180}, 25));
+    DrawEllipse(gridToIso(10, 10, origin).x, gridToIso(10, 10, origin).y+4, 30, 14, alpha({80, 50, 20}, 30));
 
-    // Furniture (posiciones relativas al tamaño de pantalla)
-    drawDesk(gridToIso(3, 3, origin), {56,189,248,255});
-    drawDesk(gridToIso(12, 4, origin), {16,185,129,255});
-    drawServerRack(gridToIso(12, 2, origin));
-    drawServerRack(gridToIso(13, 2, origin));
-    drawMeetingTable(gridToIso(3, 11, origin));
-    drawCoffeeLounge(gridToIso(12, 12, origin));
-    drawWallClock(gridToIso(0, 10, origin), time);
-    drawWhiteboard(gridToIso(7, 10, origin));
-    // 3 plantas
-    drawPottedPlant(gridToIso(1, 1, origin));
-    drawPottedPlant(gridToIso(14, 14, origin));
-    drawPottedPlant(gridToIso(7, 14, origin));
-    // Cuadros decorativos
-    drawPictureFrame(gridToIso(11, 7, origin), {70,40,60,255}, {120,80,100,255});
-    drawPictureFrame(gridToIso(0, 5, origin), {40,60,80,255}, {70,100,130,255});
+    // 4. Mobiliario con texturas
+    drawFurnitureTex(gridToIso(3, 3, origin), texDesk, {-22, -8}, WHITE);
+    drawFurnitureTex(gridToIso(12, 4, origin), texDesk, {-22, -8}, WHITE);
+    drawFurnitureTex(gridToIso(12, 2, origin), texServer, {-16, -35}, WHITE);
+    drawFurnitureTex(gridToIso(13, 2, origin), texServer, {-16, -35}, WHITE);
+    drawFurnitureTex(gridToIso(3, 11, origin), texMeeting, {-32, -16}, WHITE);
+    drawFurnitureTex(gridToIso(12, 12, origin), texLounge, {-30, -10}, WHITE);
+    drawFurnitureTex(gridToIso(0, 10, origin), texClock, {-8, -8}, WHITE);
+    drawFurnitureTex(gridToIso(7, 10, origin), texWhiteboard, {-16, -14}, WHITE);
+    drawFurnitureTex(gridToIso(1, 1, origin), texPlant, {-10, -10}, WHITE);
+    drawFurnitureTex(gridToIso(14, 14, origin), texPlant, {-10, -10}, WHITE);
+    drawFurnitureTex(gridToIso(7, 14, origin), texPlant, {-10, -10}, WHITE);
+    drawFurnitureTex(gridToIso(11, 7, origin), texFrame, {-10, -12}, WHITE);
+    drawFurnitureTex(gridToIso(0, 5, origin), texFrame, {-10, -12}, WHITE);
 
-    // Entities sorted by depth
+    // 5. Entidades ordenadas por profundidad
     std::vector<int> idx(entities.size());
     for (int i = 0; i < (int)entities.size(); i++) idx[i] = i;
     std::sort(idx.begin(), idx.end(), [&](int a, int b) {

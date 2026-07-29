@@ -70,6 +70,7 @@ int main() {
 
     CloseAudioDevice();
     stopLlmThread();
+    unloadTextures();
     CloseWindow();
     return 0;
 }

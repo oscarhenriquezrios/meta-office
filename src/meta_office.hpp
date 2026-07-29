@@ -98,6 +98,7 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                       bool paused, double dt, double time);
 
 void drawScene(const std::vector<Entity>& entities, Vector2 origin, double time);
+void unloadTextures();
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
             int selectedId, bool paused);
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
