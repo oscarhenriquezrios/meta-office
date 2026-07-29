@@ -10,6 +10,13 @@ int main() {
     InitWindow(SCREEN_W_DEF, SCREEN_H_DEF, "Meta-Office 2D | Oficina Virtual C++");
     SetWindowMinSize(960, 540);
     SetTargetFPS(60);
+
+    // Inicializar audio
+    InitAudioDevice();
+    if (!IsAudioDeviceReady()) {
+        TraceLog(LOG_WARNING, "Audio device not available - no sound will play");
+    }
+
     MaximizeWindow(); // Arranca maximizada para verse mejor
 
     std::vector<Entity> entities;
@@ -61,6 +68,7 @@ int main() {
         EndDrawing();
     }
 
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }

@@ -66,6 +66,7 @@ extern LLMConfig g_llmConfig;
 
 // Menu de config LLM
 extern bool g_showLlmConfig;
+void saveLlmConfig();
 
 const char* getSystemPrompt(EntityType type);
 

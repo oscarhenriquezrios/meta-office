@@ -89,6 +89,7 @@ void drawLlmConfigPanel() {
             g_llmConfig.endpoint = inputEndpoint;
             g_llmConfig.apiKey = inputApiKey;
             if (strlen(inputModel) > 2) g_llmConfig.model = inputModel;
+            saveLlmConfig(); // Persistir a llm_config.env
             g_showLlmConfig = false;
         }
     }

@@ -1,11 +1,10 @@
 #!/bin/bash
 # ============================================================
-# Instalación de Meta-Office — Oficina Virtual C++ / raylib
-# Ejecutar en la laptop (no en el VPS)
+# Instalación de Meta-Office desde GitHub
 # ============================================================
 set -e
 
-echo "=== Meta-Office: Instalación ==="
+echo "=== Meta-Office: Instalación desde GitHub ==="
 
 # 1. Dependencias del sistema
 echo "[1/5] Instalando dependencias del sistema..."
@@ -16,7 +15,7 @@ sudo apt-get install -y -qq \
     libgl1-mesa-dev libglu1-mesa-dev \
     libxinerama-dev libxcursor-dev libxkbcommon-dev \
     libcurl4-openssl-dev \
-    wget tar 2>&1 | tail -1
+    git wget tar 2>&1 | tail -1
 
 # 2. raylib 5.5
 echo "[2/5] Instalando raylib 5.5..."
@@ -33,35 +32,37 @@ if [ ! -f /usr/local/lib/libraylib.a ]; then
     cd /tmp && rm -rf raylib-5.5*
     echo "   raylib instalado."
 else
-    echo "   raylib ya instalado, saltando."
+    echo "   raylib ya instalado."
 fi
 
-# 3. Copiar el proyecto
-echo "[3/5] Copiando proyecto desde VPS..."
-scp -r root@169.58.6.79:/root/meta-office/ ~/meta-office 2>/dev/null || {
-    echo "   No se pudo copiar. Asegurate de tener acceso SSH al VPS."
-    echo "   Alternativa: clona desde GitHub o copia manual."
-    exit 1
-}
+# 3. Clonar repositorio
+echo "[3/5] Clonando repositorio..."
+cd ~
+if [ -d meta-office ]; then
+    echo "   Ya existe, actualizando..."
+    cd meta-office && git pull
+else
+    git clone https://github.com/oscarhenriquezrios/meta-office.git
+    cd meta-office
+fi
 
 # 4. Compilar
 echo "[4/5] Compilando..."
-cd ~/meta-office
 make clean -s 2>/dev/null
-make -j$(nproc) 2>&1 | grep -E "^(g\+\+|error|warning:.*error)"
+make -j$(nproc) 2>&1 | grep -E "^(g\+\+|error)"
 
+# 5. Listo!
 echo ""
 echo "=== Instalación completa ==="
 echo ""
-echo "Para ejecutar con IA real (OpenAI):"
-echo "  export OPENAI_API_KEY=\"sk-...\""
+echo "Para ejecutar:"
 echo "  cd ~/meta-office && ./meta-office"
 echo ""
-echo "O con OpenRouter:"
-echo "  export LLM_ENDPOINT=\"https://openrouter.ai/api/v1/chat/completions\""
-echo "  export LLM_MODEL=\"openai/gpt-4o-mini\""
-echo "  export OPENAI_API_KEY=\"sk-or-...\""
-echo "  cd ~/meta-office && ./meta-office"
+echo "Para configurar IA desde la app:"
+echo "  Presiona el boton ⚙️ en la esquina superior derecha"
 echo ""
-echo "Sin API key los agentes mostraran 'LLM no configurado'"
+echo "Para configurar manual:"
+echo "  edita el archivo llm_config.env en ~/meta-office/"
+echo ""
+echo "Sin API key los agentes muestran 'LLM no configurado'"
 echo "pero la oficina igual funciona."

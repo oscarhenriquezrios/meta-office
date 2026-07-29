@@ -1,9 +1,39 @@
 #include "meta_office.hpp"
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 
 LLMConfig g_llmConfig;
 bool g_showLlmConfig = false;
+
+// Cargar config LLM desde llm_config.env
+static void loadLlmConfig() {
+    std::ifstream f("llm_config.env");
+    if (!f.is_open()) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        if (key == "LLM_ENDPOINT") g_llmConfig.endpoint = val;
+        else if (key == "OPENAI_API_KEY") g_llmConfig.apiKey = val;
+        else if (key == "LLM_MODEL") g_llmConfig.model = val;
+    }
+}
+
+// Guardar config LLM a llm_config.env
+void saveLlmConfig() {
+    std::ofstream f("llm_config.env");
+    if (!f.is_open()) return;
+    f << "# Meta-Office LLM Config\n";
+    f << "# Protocolo compatible con OpenAI API\n\n";
+    f << "LLM_ENDPOINT=" << g_llmConfig.endpoint << "\n";
+    f << "OPENAI_API_KEY=" << g_llmConfig.apiKey << "\n";
+    f << "LLM_MODEL=" << g_llmConfig.model << "\n";
+    f.close();
+}
 
 const char* getSystemPrompt(EntityType type) {
     switch (type) {
@@ -21,8 +51,50 @@ const char* getSystemPrompt(EntityType type) {
     }
 }
 
+// Sonidos simples generados proceduralmente
+static Sound genBeep(float freq, float duration, float volume) {
+    int sampleRate = 22050;
+    int sampleCount = (int)(sampleRate * duration);
+    short* samples = new short[sampleCount];
+    for (int i = 0; i < sampleCount; i++) {
+        float t = (float)i / sampleRate;
+        float val = sinf(2 * 3.14159f * freq * t);
+        // Envelope para evitar clicks
+        float env = 1.0f;
+        if (t < 0.01f) env = t / 0.01f;
+        if (t > duration - 0.01f) env = (duration - t) / 0.01f;
+        samples[i] = (short)(val * env * volume * 32767);
+    }
+    Wave w = {0};
+    w.data = samples;
+    w.frameCount = sampleCount;
+    w.sampleRate = sampleRate;
+    w.sampleSize = 16;
+    w.channels = 1;
+    Sound s = LoadSoundFromWave(w);
+    delete[] samples; // LoadSoundFromWave copia los datos
+    return s;
+}
+
+static Sound sndPass = {0};
+static Sound sndFail = {0};
+static Sound sndRepair = {0};
+static Sound sndChat = {0};
+static bool soundsLoaded = false;
+
+static void initSounds() {
+    if (soundsLoaded) return;
+    sndPass = genBeep(880, 0.15f, 0.3f);
+    sndFail = genBeep(220, 0.4f, 0.4f);
+    sndRepair = genBeep(660, 0.3f, 0.3f);
+    sndChat = genBeep(440, 0.08f, 0.15f);
+    soundsLoaded = true;
+}
+
 void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) {
     g_llmConfig = llmConfigFromEnv();
+    loadLlmConfig();
+    initSounds();
 
     entities.clear();
     logs.clear();
@@ -134,9 +206,11 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                 codeBot->hasCriticalError = true;
                 codeBot->status = Status::Error;
                 codeBot->speech = {"Encontre un bug critico! Necesito ayuda!", time + 5.0};
+                if (IsAudioDeviceReady()) PlaySound(sndFail);
                 logs.push_back({"CodeBot detecto un BUG CRITICO!", GetTime(), {244,63,94,255}});
             } else {
                 agentThink(*codeBot, "Acabas de pasar todos los tests. Que dices?", time);
+                if (IsAudioDeviceReady()) PlaySound(sndPass);
                 logs.push_back({TextFormat("CodeBot: test #%d PASSED", codeBot->testCount), GetTime(), {56,189,248,255}});
             }
         }
@@ -173,6 +247,7 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
             orchestrator->targetX = codeBot->x;
             orchestrator->targetY = codeBot->y + 1;
             orchestrator->speech = {"Voy a reparar a CodeBot", time + 5.0};
+            if (IsAudioDeviceReady()) PlaySound(sndRepair);
             logs.push_back({"Orchestrator interviene para reparar CodeBot", GetTime(), {168,85,247,255}});
         }
         if (orchestrator->isIntervening && codeBot) {
@@ -187,6 +262,7 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                     orchestrator->targetX = 8;
                     orchestrator->targetY = 8;
                     orchestrator->speech = {"CodeBot reparado. Todo ok.", time + 4.0};
+                    if (IsAudioDeviceReady()) PlaySound(sndPass);
                     logs.push_back({"Orchestrator reparo a CodeBot exitosamente", GetTime(), {16,185,129,255}});
                 }
             }

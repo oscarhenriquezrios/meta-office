@@ -40,5 +40,8 @@ Thumbs.db
 # Archivos de ayuda para subir (contienen tokens)
 push-to-github.sh
 
+# Config de LLM (API keys)
+llm_config.env
+
 # Logs
 *.log
