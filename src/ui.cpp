@@ -360,6 +360,124 @@ void drawTaskPanel(const std::vector<Entity>& entities) {
 // ============================================================
 // drawUI
 // ============================================================
+
+// ============================================================
+// Deliverables Panel — lista y visor de entregables
+// ============================================================
+void drawDeliverablesPanel() {
+    if (!g_showDeliverables) return;
+
+    int pw = 560, ph = 500;
+    int px = (screenW - pw) / 2;
+    int py = (screenH - ph) / 2;
+
+    DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 160));
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,245});
+    DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {16,185,129,180});
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, 50}, 0.06f, 6, alpha({16,185,129,255}, 25));
+    DrawText("ENTREGABLES", px + 20, py + 12, 18, WHITE);
+    DrawText(TextFormat("(%zu)", g_deliverables.size()), px + 160, py + 16, 12, {148,163,184,255});
+
+    Rectangle btnClose = {(float)px + pw - 40, (float)py + 8, 32, 32};
+    if (drawButton(btnClose, "X", alpha(RED, 100), 14)) { closeDeliverablesPanel(); return; }
+
+    Vector2 mp = GetMousePosition();
+
+    if (g_viewDeliverableId >= 0) {
+        // === VISTA DE CONTENIDO ===
+        Deliverable* d = nullptr;
+        for (auto& del : g_deliverables) if (del.id == g_viewDeliverableId) { d = &del; break; }
+        if (!d) { g_viewDeliverableId = -1; return; }
+
+        // Header del entregable
+        int yy = py + 60;
+        DrawText(deliverableTypeName(d->type), px + 20, yy, 12, deliverableTypeColor(d->type));
+        DrawText(d->title.c_str(), px + 90, yy, 14, WHITE);
+        yy += 20;
+        DrawText(TextFormat("Por: %s | Archivo: %s", d->agentName.c_str(), d->filename.c_str()),
+                 px + 20, yy, 10, {148,163,184,255});
+        yy += 24;
+
+        // Boton "volver"
+        Rectangle btnBack = {(float)px + 20, (float)yy, 100, 28};
+        if (drawButton(btnBack, "< VOLVER", alpha(WHITE, 10), 11)) { g_viewDeliverableId = -1; return; }
+        yy += 36;
+
+        // Area de contenido (con scroll manual via lineas)
+        int contentH = py + ph - yy - 16;
+        DrawRectangle(px + 12, yy, pw - 24, contentH, alpha(BLACK, 120));
+        DrawRectangleLines(px + 12, yy, pw - 24, contentH, alpha(WHITE, 15));
+
+        // Renderizar contenido linea por linea
+        std::string content = d->content;
+        int lineY = yy + 8;
+        size_t lineStart = 0;
+        while (lineStart < content.size() && lineY < yy + contentH - 10) {
+            size_t lineEnd = content.find('\n', lineStart);
+            if (lineEnd == std::string::npos) lineEnd = content.size();
+            std::string line = content.substr(lineStart, lineEnd - lineStart);
+            // Truncar linea larga
+            if ((int)line.size() > 75) line = line.substr(0, 72) + "...";
+            DrawText(line.c_str(), px + 20, lineY, 9, {200,210,220,255});
+            lineY += 12;
+            lineStart = lineEnd + 1;
+        }
+
+        DrawText(TextFormat("%zu caracteres", d->content.size()),
+                 px + 20, py + ph - 18, 10, {100,116,139,255});
+    } else {
+        // === LISTA DE ENTREGABLES ===
+        int yy = py + 60;
+        DrawText("ARCHIVOS ENTREGADOS", px + 20, yy, 13, {16,185,129,255});
+        yy += 24;
+
+        int listH = py + ph - yy - 16;
+        DrawRectangle(px + 12, yy, pw - 24, listH, alpha(BLACK, 100));
+        DrawRectangleLines(px + 12, yy, pw - 24, listH, alpha(WHITE, 15));
+
+        if (g_deliverables.empty()) {
+            DrawText("Sin entregables.", px + 28, yy + 20, 12, {100,116,139,255});
+            DrawText("Asigna tareas a los bots y produciran archivos.", px + 28, yy + 40, 10, {80,90,105,255});
+        }
+
+        int entryY = yy + 8;
+        int startIdx = std::max(0, (int)g_deliverables.size() - 15);
+        for (int i = startIdx; i < (int)g_deliverables.size(); i++) {
+            if (entryY - yy > listH - 16) break;
+            auto& d = g_deliverables[i];
+
+            Rectangle row = {(float)px + 14, (float)entryY - 2, (float)(pw - 28), 50};
+            bool hover = CheckCollisionPointRec(mp, row);
+            DrawRectangle(row.x, row.y, row.width, row.height, hover ? alpha(WHITE, 8) : alpha(WHITE, 3));
+            DrawRectangleLines(row.x, row.y, row.width, row.height, alpha(deliverableTypeColor(d.type), hover ? 100 : 30));
+
+            // Tipo
+            Color tc = deliverableTypeColor(d.type);
+            DrawRectangleRounded({row.x + 4, row.y + 6, 60, 18}, 0.2f, 3, alpha(tc, 60));
+            DrawText(deliverableTypeName(d.type), row.x + 8, row.y + 9, 9, tc);
+
+            // Titulo
+            std::string title = d.title;
+            if ((int)title.size() > 35) title = title.substr(0, 32) + "...";
+            DrawText(title.c_str(), row.x + 72, row.y + 6, 12, WHITE);
+
+            // Autor
+            DrawText(TextFormat("Por %s", d.agentName.c_str()), row.x + 72, row.y + 24, 9, {148,163,184,255});
+
+            // Preview
+            std::string prev = d.preview;
+            if ((int)prev.size() > 50) prev = prev.substr(0, 47) + "...";
+            DrawText(prev.c_str(), row.x + 72, row.y + 36, 8, {100,116,139,255});
+
+            // Click para ver
+            if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+                g_viewDeliverableId = d.id;
+
+            entryY += 56;
+        }
+    }
+}
+
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
             int selectedId, bool paused) {
     // TOP BAR
@@ -382,6 +500,15 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
 
     DrawCircle(screenW - 400, 16, 5, paused ? ORANGE : GREEN);
     DrawText(paused ? "PAUSADO" : "LIVE", screenW - 388, 12, 12, paused ? ORANGE : GREEN);
+
+    // Botón ARCHIVOS
+    Rectangle btnFiles = {(float)screenW - 400, 8, 80, 34};
+    bool filesHover = CheckCollisionPointRec(GetMousePosition(), btnFiles);
+    DrawRectangleRounded(btnFiles, 0.2f, 4, g_showDeliverables ? alpha({16,185,129,255}, 60) : alpha(WHITE, filesHover ? 15 : 8));
+    DrawRectangleRoundedLines(btnFiles, 0.2f, 4, g_showDeliverables ? (Color){16,185,129,200} : alpha(WHITE, 30));
+    DrawText("ARCHIVOS", btnFiles.x + 4, btnFiles.y + 9, 11, WHITE);
+
+        // Botón ARCHIVOS
 
     // Botón TAREAS
     Rectangle btnTasks = {(float)screenW - 310, 8, 80, 34};
@@ -472,6 +599,7 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     drawLlmConfigPanel();
     drawChatPanel(entities);
     drawLogPanel(entities);
+    drawDeliverablesPanel();
     drawTaskPanel(entities);
 }
 
@@ -480,6 +608,20 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
 // ============================================================
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
                  int& selectedId, bool& paused, float& panY) {
+    // Deliverables panel
+    if (g_showDeliverables) {
+        if (IsKeyPressed(KEY_ESCAPE)) { g_viewDeliverableId = -1; if (!g_viewDeliverableId) closeDeliverablesPanel(); }
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            Vector2 mp = GetMousePosition();
+            int pw = 560, ph = 500;
+            int ppx = (screenW - pw) / 2;
+            int ppy = (screenH - ph) / 2;
+            if (!CheckCollisionPointRec(mp, {(float)ppx, (float)ppy, (float)pw, (float)ph}))
+                closeDeliverablesPanel();
+        }
+        return;
+    }
+
     // Task panel abierto
     if (g_showTaskPanel) {
         if (IsKeyPressed(KEY_ESCAPE)) closeTaskPanel();
@@ -554,6 +696,14 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mp = GetMousePosition();
+
+    // Botón ARCHIVOS
+
+        // Botón ARCHIVOS
+
+        // Botón ARCHIVOS
+        Rectangle btnFilesH = {(float)screenW - 400, 8, 80, 34};
+        if (CheckCollisionPointRec(mp, btnFilesH)) { g_showDeliverables = !g_showDeliverables; g_viewDeliverableId = -1; return; }
 
         // Botón TAREAS
         Rectangle btnTasks = {(float)screenW - 310, 8, 80, 34};

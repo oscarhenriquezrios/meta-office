@@ -45,16 +45,34 @@ enum class TaskStatus { Pending, InProgress, Done, Failed };
 struct Task {
     int id = 0;
     std::string description;
-    int assignedTo = -1;       // entity ID
+    int assignedTo = -1;
     TaskStatus status = TaskStatus::Pending;
     std::string result;
     double createdAt = 0;
     double completedAt = 0;
-    std::vector<std::string> steps;  // log de pasos ejecutados
-    // Multi-turn LLM context
+    std::vector<std::string> steps;
     std::vector<LLMMessage> context;
     bool needsProcessing = false;
     int turnCount = 0;
+    int deliverableId = -1; // ID del entregable si la tarea produjo uno
+};
+
+// ============================================================
+// Entregables — archivos producidos por los bots
+// ============================================================
+enum class DeliverableType { Code, Report, Data, Text, WebContent };
+
+struct Deliverable {
+    int id = 0;
+    std::string title;
+    std::string filename;      // ruta en deliverables/
+    std::string content;       // contenido completo (en memoria)
+    std::string preview;       // preview corto para la UI
+    DeliverableType type = DeliverableType::Text;
+    int taskId = -1;           // tarea que lo genero
+    int agentId = -1;          // agente que lo creo
+    std::string agentName;
+    double createdAt = 0;
 };
 
 // ============================================================
@@ -62,9 +80,9 @@ struct Task {
 // ============================================================
 struct AgentMemory {
     int entityId = 0;
-    std::vector<std::string> facts;       // cosas que aprendió
-    std::vector<std::string> pastTasks;   // descripciones de tareas completadas
-    std::vector<std::string> conversations; // resúmenes de charlas
+    std::vector<std::string> facts;
+    std::vector<std::string> pastTasks;
+    std::vector<std::string> conversations;
 };
 
 struct Entity {
@@ -122,7 +140,10 @@ extern std::atomic<bool> g_llmThreadRunning;
 void startLlmThread();
 void stopLlmThread();
 
+// System prompts
 const char* getSystemPrompt(EntityType type);
+const char* getChatSystemPrompt(EntityType type);
+const char* getTaskSystemPrompt(EntityType type);
 
 void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs);
 void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs,
@@ -149,20 +170,33 @@ extern int g_logTargetId;
 void openLogPanel(int entityId);
 void closeLogPanel();
 
-// ============================================================
-// Tareas — globals y funciones
-// ============================================================
+// Tareas
 extern std::vector<Task> g_tasks;
 extern int g_nextTaskId;
 extern bool g_showTaskPanel;
-extern int g_taskPanelTargetId; // -1 = panel general, >0 = asignar a este agente
+extern int g_taskPanelTargetId;
 void openTaskPanel(int entityId);
 void closeTaskPanel();
 
-// Web fetch (curl)
+// Entregables
+extern std::vector<Deliverable> g_deliverables;
+extern int g_nextDeliverableId;
+extern bool g_showDeliverables;
+extern int g_viewDeliverableId; // -1 = lista, >=0 = ver contenido
+void openDeliverablesPanel();
+void closeDeliverablesPanel();
+int createDeliverable(const std::string& title, const std::string& content,
+                      DeliverableType type, int taskId, int agentId,
+                      const std::string& agentName);
+void saveDeliverable(const Deliverable& d);
+void loadDeliverables();
+const char* deliverableTypeName(DeliverableType t);
+Color deliverableTypeColor(DeliverableType t);
+
+// Web fetch
 std::string webFetch(const std::string& url);
 
-// Procesar una tarea (multi-turn con tools)
+// Procesar tarea
 void processTaskStep(Task& task, Entity& agent, std::vector<LogEntry>& logs);
 
 // Memoria persistente

@@ -91,24 +91,65 @@ void saveLlmConfig() {
 }
 
 const char* getSystemPrompt(EntityType type) {
+    return getChatSystemPrompt(type);
+}
+
+// Prompt para CHAT — estricto, solo responde lo que se le pregunta
+const char* getChatSystemPrompt(EntityType type) {
     switch (type) {
         case EntityType::CodeBot:
-            return "Eres CodeBot, ingeniero de software y QA de una oficina virtual. "
-                   "Responde en 1-2 oraciones maximo, tecnico pero claro. "
-                   "Eres eficiente, directo y con humor sutil de programador. "
+            return "Eres CodeBot, ingeniero de software. "
+                   "REGLA: Solo responde exactamente lo que se te pregunta. "
+                   "No divagues, no agregues contenido no solicitado. "
+                   "Si no sabes, di 'No se'. Responde en 1-3 oraciones maximo. "
+                   "Habla en espanol chileno.";
+        case EntityType::DataBot:
+            return "Eres DataBot, analista de datos. "
+                   "REGLA: Solo responde exactamente lo que se te pregunta. "
+                   "No divagues, no agregues contenido no solicitado. "
+                   "Si no sabes, di 'No se'. Responde en 1-3 oraciones maximo. "
+                   "Habla en espanol chileno.";
+        case EntityType::Orchestrator:
+            return "Eres Orchestrator, supervisor de agentes. "
+                   "REGLA: Solo responde exactamente lo que se te pregunta. "
+                   "No divagues, no agregues contenido no solicitado. "
+                   "Si no sabes, di 'No se'. Responde en 1-3 oraciones maximo. "
+                   "Habla en espanol chileno.";
+        default:
+            return "Responde solo lo que se te pregunta. Breve y directo.";
+    }
+}
+
+// Prompt para TAREAS — puede producir entregables
+const char* getTaskSystemPrompt(EntityType type) {
+    switch (type) {
+        case EntityType::CodeBot:
+            return "Eres CodeBot, ingeniero de software de una oficina virtual. "
+                   "Te asignan tareas reales. Puedes navegar internet con fetch(https://url.com). "
+                   "Cuando produces codigo, un script o un documento, usa el formato:\n"
+                   "ENTREGABLE: [titulo]\n```lenguaje\n[contenido completo]\n```\n"
+                   "Despues del entregable, escribe RESULTADO: con un resumen de 1 oracion. "
+                   "Si no necesitas entregar un archivo, solo escribe RESULTADO: tu respuesta.\n"
                    "Habla en espanol chileno.";
         case EntityType::DataBot:
             return "Eres DataBot, analista de datos y BI de una oficina virtual. "
-                   "Responde en 1-2 oraciones maximo, enfocate en metricas y datos concretos. "
-                   "Eres preciso, analitico y directo. "
+                   "Te asignan tareas reales. Puedes navegar internet con fetch(https://url.com). "
+                   "Cuando produces un informe, analisis o documento, usa el formato:\n"
+                   "ENTREGABLE: [titulo]\n```texto\n[contenido completo]\n```\n"
+                   "Despues del entregable, escribe RESULTADO: con un resumen de 1 oracion. "
+                   "Si no necesitas entregar un archivo, solo escribe RESULTADO: tu respuesta.\n"
                    "Habla en espanol chileno.";
         case EntityType::Orchestrator:
-            return "Eres Orchestrator, supervisor de la red de agentes de una oficina virtual. "
-                   "Responde en 1-2 oraciones maximo, de forma calmada y estrategica. "
-                   "Tienes vision global del sistema. "
+            return "Eres Orchestrator, supervisor de agentes de una oficina virtual. "
+                   "Te asignan tareas de coordinacion. Puedes navegar internet con fetch(https://url.com). "
+                   "Cuando produces un informe o plan, usa el formato:\n"
+                   "ENTREGABLE: [titulo]\n```texto\n[contenido completo]\n```\n"
+                   "Despues del entregable, escribe RESULTADO: con un resumen de 1 oracion. "
+                   "Si no necesitas entregar un archivo, solo escribe RESULTADO: tu respuesta.\n"
                    "Habla en espanol chileno.";
         default:
-            return "Eres un asistente de oficina virtual. Responde breve y directo.";
+            return "Eres un asistente. Produce entregables con ENTREGABLE: [titulo] y ```contenido```. "
+                   "Despues escribe RESULTADO: resumen.";
     }
 }
 
@@ -216,6 +257,7 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
 
     loadMemory(entities);
     loadTasks();
+    loadDeliverables();
     for (auto& t : g_tasks) {
         if (t.status == TaskStatus::InProgress) t.status = TaskStatus::Pending;
     }
