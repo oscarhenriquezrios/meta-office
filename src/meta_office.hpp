@@ -6,6 +6,10 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <atomic>
 #include "llm_client.hpp"
 
 // Config
@@ -67,6 +71,25 @@ extern LLMConfig g_llmConfig;
 // Menu de config LLM
 extern bool g_showLlmConfig;
 void saveLlmConfig();
+
+// Cola de LLM async
+struct LlmRequest {
+    int entityId;          // -1 si no es para una entidad
+    std::string systemPrompt;
+    std::string userMessage;
+    double expiryTime;
+};
+struct LlmResponse {
+    int entityId;
+    std::string text;
+    double expiryTime;
+};
+extern std::queue<LlmRequest> g_llmQueue;
+extern std::vector<LlmResponse> g_llmResults;
+extern std::mutex g_llmMutex;
+extern std::atomic<bool> g_llmThreadRunning;
+void startLlmThread();
+void stopLlmThread();
 
 const char* getSystemPrompt(EntityType type);
 

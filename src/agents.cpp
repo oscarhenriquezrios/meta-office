@@ -6,6 +6,52 @@
 LLMConfig g_llmConfig;
 bool g_showLlmConfig = false;
 
+// Cola de LLM async
+std::queue<LlmRequest> g_llmQueue;
+std::vector<LlmResponse> g_llmResults;
+std::mutex g_llmMutex;
+std::atomic<bool> g_llmThreadRunning(false);
+static std::thread g_llmThread;
+
+static void llmWorker() {
+    while (g_llmThreadRunning) {
+        LlmRequest req;
+        {
+            std::lock_guard<std::mutex> lock(g_llmMutex);
+            if (!g_llmQueue.empty()) {
+                req = g_llmQueue.front();
+                g_llmQueue.pop();
+            }
+        }
+        if (req.entityId != 0 || !req.userMessage.empty()) {
+            std::vector<LLMMessage> msgs = {
+                {"system", req.systemPrompt},
+                {"user", req.userMessage}
+            };
+            std::string reply = llmChat(g_llmConfig, msgs);
+            if (reply.empty()) reply = "...";
+            if (reply.size() > 120) reply = reply.substr(0, 117) + "...";
+            {
+                std::lock_guard<std::mutex> lock(g_llmMutex);
+                g_llmResults.push_back({req.entityId, reply, req.expiryTime});
+            }
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+}
+
+void startLlmThread() {
+    if (g_llmThreadRunning) return;
+    g_llmThreadRunning = true;
+    g_llmThread = std::thread(llmWorker);
+}
+
+void stopLlmThread() {
+    g_llmThreadRunning = false;
+    if (g_llmThread.joinable()) g_llmThread.join();
+}
+
 // Cargar config LLM desde llm_config.env
 static void loadLlmConfig() {
     std::ifstream f("llm_config.env");
@@ -95,6 +141,7 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
     g_llmConfig = llmConfigFromEnv();
     loadLlmConfig();
     initSounds();
+    startLlmThread();
 
     entities.clear();
     logs.clear();
@@ -137,23 +184,14 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
     logs.push_back({"DataBot conectado a data warehouse.", GetTime(), {16,185,129,255}});
 }
 
-// Llama al LLM y asigna el speech bubble
+// Encola una peticion LLM (no bloquea)
 static void agentThink(Entity& e, const std::string& userMsg, double time) {
     if (g_llmConfig.apiKey.empty() || g_llmConfig.apiKey == "sk-...") {
-        e.speech = {"LLM no configurado (setea OPENAI_API_KEY)", time + 5.0};
+        e.speech = {"LLM no configurado (configura en ⚙️)", time + 5.0};
         return;
     }
-
-    std::vector<LLMMessage> msgs = {
-        {"system", getSystemPrompt(e.type)},
-        {"user", userMsg}
-    };
-
-    std::string reply = llmChat(g_llmConfig, msgs);
-    if (reply.empty()) reply = "...";
-    // Limitar largo
-    if (reply.size() > 120) reply = reply.substr(0, 117) + "...";
-    e.speech = {reply, time + 5.0};
+    std::lock_guard<std::mutex> lock(g_llmMutex);
+    g_llmQueue.push({e.id, getSystemPrompt(e.type), userMsg, time + 5.0});
 }
 
 void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs,
@@ -282,6 +320,20 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                 e.hasGreetedHuman = false;
             }
         }
+    }
+
+    // Procesar respuestas del hilo LLM (no bloquea el main loop)
+    {
+        std::lock_guard<std::mutex> lock(g_llmMutex);
+        for (auto& res : g_llmResults) {
+            for (auto& e : entities) {
+                if (e.id == res.entityId) {
+                    e.speech = {res.text, res.expiryTime};
+                    break;
+                }
+            }
+        }
+        g_llmResults.clear();
     }
 
     // Limpiar speech bubbles expirados

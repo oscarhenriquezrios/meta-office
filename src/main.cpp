@@ -69,6 +69,7 @@ int main() {
     }
 
     CloseAudioDevice();
+    stopLlmThread();
     CloseWindow();
     return 0;
 }
