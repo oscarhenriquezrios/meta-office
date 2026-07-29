@@ -40,7 +40,6 @@ static void llmWorker() {
             if (reply.empty()) reply = "...";
             if (reply.size() > 120) reply = reply.substr(0, 117) + "...";
             double expiry = req.expiryTime;
-            // Si la respuesta llega después del expiry original, darle 8s extra
             double now = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
             if (now > expiry) expiry = now + 8.0;
             {
@@ -64,7 +63,6 @@ void stopLlmThread() {
     if (g_llmThread.joinable()) g_llmThread.join();
 }
 
-// Cargar config LLM desde llm_config.env
 static void loadLlmConfig() {
     std::ifstream f("llm_config.env");
     if (!f.is_open()) return;
@@ -81,7 +79,6 @@ static void loadLlmConfig() {
     }
 }
 
-// Guardar config LLM a llm_config.env
 void saveLlmConfig() {
     std::ofstream f("llm_config.env");
     if (!f.is_open()) return;
@@ -115,7 +112,7 @@ const char* getSystemPrompt(EntityType type) {
     }
 }
 
-// Sonidos simples generados proceduralmente
+// Sonidos
 static Sound genBeep(float freq, float duration, float volume) {
     int sampleRate = 22050;
     int sampleCount = (int)(sampleRate * duration);
@@ -123,7 +120,6 @@ static Sound genBeep(float freq, float duration, float volume) {
     for (int i = 0; i < sampleCount; i++) {
         float t = (float)i / sampleRate;
         float val = sinf(2 * 3.14159f * freq * t);
-        // Envelope para evitar clicks
         float env = 1.0f;
         if (t < 0.01f) env = t / 0.01f;
         if (t > duration - 0.01f) env = (duration - t) / 0.01f;
@@ -136,23 +132,39 @@ static Sound genBeep(float freq, float duration, float volume) {
     w.sampleSize = 16;
     w.channels = 1;
     Sound s = LoadSoundFromWave(w);
-    delete[] samples; // LoadSoundFromWave copia los datos
+    delete[] samples;
     return s;
 }
 
 static Sound sndPass = {0};
-static Sound sndFail = {0};
-static Sound sndRepair = {0};
 static Sound sndChat = {0};
 static bool soundsLoaded = false;
 
 static void initSounds() {
     if (soundsLoaded) return;
     sndPass = genBeep(880, 0.15f, 0.3f);
-    sndFail = genBeep(220, 0.4f, 0.4f);
-    sndRepair = genBeep(660, 0.3f, 0.3f);
     sndChat = genBeep(440, 0.08f, 0.15f);
     soundsLoaded = true;
+}
+
+// ============================================================
+// Posiciones "home" de cada bot (donde vuelven al terminar)
+// ============================================================
+static float homeX(EntityType type) {
+    switch (type) {
+        case EntityType::CodeBot: return 3;
+        case EntityType::DataBot: return 12;
+        case EntityType::Orchestrator: return 8;
+        default: return 11;
+    }
+}
+static float homeY(EntityType type) {
+    switch (type) {
+        case EntityType::CodeBot: return 3;
+        case EntityType::DataBot: return 4;
+        case EntityType::Orchestrator: return 8;
+        default: return 11;
+    }
 }
 
 void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) {
@@ -197,11 +209,11 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
         .status = Status::Idle
     });
 
-    logs.push_back({"Simulacion de Oficina Virtual iniciada.", GetTime(), {56,189,248,255}});
+    logs.push_back({"Oficina virtual iniciada.", GetTime(), {56,189,248,255}});
     logs.push_back({"CodeBot listo en Area de Desarrollo.", GetTime(), {56,189,248,255}});
     logs.push_back({"DataBot conectado a data warehouse.", GetTime(), {16,185,129,255}});
+    logs.push_back({"Orchestrator monitoreando red de agentes.", GetTime(), {168,85,247,255}});
 
-    // Cargar memoria persistente
     loadMemory(entities);
     loadTasks();
     for (auto& t : g_tasks) {
@@ -212,12 +224,72 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
 // Encola una peticion LLM (no bloquea)
 static void agentThink(Entity& e, const std::string& userMsg, double time) {
     if (g_llmConfig.apiKey.empty() || g_llmConfig.apiKey == "sk-...") {
-        e.speech = {"Configura el LLM en ⚙ para hablar conmigo", time + 5.0};
+        e.speech = {"Configura el LLM en CFG para hablar conmigo", time + 5.0};
         return;
     }
-    e.speech = {"🧠 pensando...", time + 30.0};
+    e.speech = {"pensando...", time + 30.0};
     std::lock_guard<std::mutex> lock(g_llmMutex);
     g_llmQueue.push({e.id, getSystemPrompt(e.type), userMsg, time + 15.0});
+}
+
+// ============================================================
+// Encontrar un bot por tipo
+// ============================================================
+static Entity* findBot(std::vector<Entity>& entities, EntityType type) {
+    for (auto& e : entities) if (e.type == type) return &e;
+    return nullptr;
+}
+
+// ============================================================
+// Colaboración entre bots
+// ============================================================
+struct Collaboration {
+    int requesterId = -1;
+    int helperId = -1;
+    int taskId = -1;
+    std::string description;
+    double startTime = 0;
+    bool meetingActive = false;
+    bool meetingDone = false;
+    double meetingDuration = 5.0; // segundos juntos antes de completar
+};
+
+static std::vector<Collaboration> g_collaborations;
+
+// Iniciar una colaboracion: el requester camina hacia el helper
+static void startCollaboration(int requesterId, int helperId, int taskId,
+                                const std::string& desc, double time,
+                                std::vector<Entity>& entities, std::vector<LogEntry>& logs) {
+    Collaboration c;
+    c.requesterId = requesterId;
+    c.helperId = helperId;
+    c.taskId = taskId;
+    c.description = desc;
+    c.startTime = time;
+    c.meetingActive = false;
+    c.meetingDone = false;
+
+    Entity* requester = nullptr;
+    Entity* helper = nullptr;
+    for (auto& e : entities) {
+        if (e.id == requesterId) requester = &e;
+        if (e.id == helperId) helper = &e;
+    }
+    if (!requester || !helper) return;
+
+    // El requester camina hacia el helper
+    requester->targetX = helper->x + 1;
+    requester->targetY = helper->y;
+    requester->status = Status::Walking;
+    requester->speech = {"Voy con " + helper->name, time + 8.0};
+
+    char logMsg[256];
+    snprintf(logMsg, sizeof(logMsg), "%s va con %s: %s",
+             requester->name.c_str(), helper->name.c_str(),
+             desc.size() > 40 ? (desc.substr(0, 37) + "...").c_str() : desc.c_str());
+    logs.push_back({logMsg, GetTime(), requester->color});
+
+    g_collaborations.push_back(c);
 }
 
 void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs,
@@ -225,7 +297,9 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
     (void)dt;
     if (paused) return;
 
-    // Smooth movement
+    // ============================================================
+    // Movimiento suave
+    // ============================================================
     const float speed = 0.08f;
     for (auto& e : entities) {
         float dx = e.targetX - e.renderX;
@@ -234,120 +308,120 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
         if (dist > 0.05f) {
             e.renderX += dx * speed;
             e.renderY += dy * speed;
-            e.status = Status::Walking;
+            if (e.status != Status::Busy) e.status = Status::Walking;
         } else {
             e.renderX = e.targetX;
             e.renderY = e.targetY;
             e.x = e.targetX;
             e.y = e.targetY;
-            if (e.status == Status::Walking) e.status = Status::Idle;
+            if (e.status == Status::Walking) e.status = e.isActive ? Status::Busy : Status::Idle;
         }
     }
 
     auto* human = &entities[0];
-    auto* codeBot = (entities.size() > 1) ? &entities[1] : nullptr;
-    auto* dataBot = (entities.size() > 2) ? &entities[2] : nullptr;
-    auto* orchestrator = (entities.size() > 3) ? &entities[3] : nullptr;
 
-    // CodeBot — trabaja en silencio (tests, bugs) pero NO habla solo
-    if (codeBot && !codeBot->hasCriticalError) {
-        if (!codeBot->lastActionTime) codeBot->lastActionTime = time;
-
-        // Tests — simulación visual de trabajo (sin LLM)
-        if (codeBot->x == 3 && codeBot->y == 3 && time - codeBot->lastActionTime > 12.0) {
-            codeBot->lastActionTime = time;
-            codeBot->testCount++;
-            bool fail = (rand() % 100) < 15;
-            if (fail) {
-                codeBot->hasCriticalError = true;
-                codeBot->status = Status::Error;
-                codeBot->speech = {"⚠ Bug critico detectado!", time + 5.0};
-                if (IsAudioDeviceReady()) PlaySound(sndFail);
-                logs.push_back({"CodeBot detecto un BUG CRITICO!", GetTime(), {244,63,94,255}});
-                codeBot->agentLog.push_back({"Bug critico en test #" + std::to_string(codeBot->testCount), GetTime(), {244,63,94,255}});
-            } else {
-                if (IsAudioDeviceReady()) PlaySound(sndPass);
-                logs.push_back({TextFormat("CodeBot: test #%d PASSED", codeBot->testCount), GetTime(), {56,189,248,255}});
-                codeBot->agentLog.push_back({"Test #" + std::to_string(codeBot->testCount) + " PASSED", GetTime(), {56,189,248,255}});
-            }
-            if (codeBot->agentLog.size() > 50) codeBot->agentLog.erase(codeBot->agentLog.begin());
-        }
-    }
-
-    // DataBot — trabaja en silencio (queries) pero NO habla solo
-    if (dataBot) {
-        if (!dataBot->lastActionTime) dataBot->lastActionTime = time;
-        if (time - dataBot->lastActionTime > 8.0) {
-            dataBot->lastActionTime = time;
-            dataBot->queryCount++;
-            logs.push_back({TextFormat("DataBot: query #%d ejecutada", dataBot->queryCount), GetTime(), {16,185,129,255}});
-            dataBot->agentLog.push_back({"Query #" + std::to_string(dataBot->queryCount) + " ejecutada", GetTime(), {16,185,129,255}});
-            if (dataBot->agentLog.size() > 50) dataBot->agentLog.erase(dataBot->agentLog.begin());
-        }
-    }
-
-    // Orchestrator — monitorea en silencio, NO habla solo
-    if (orchestrator) {
-        if (codeBot && codeBot->hasCriticalError && !orchestrator->isIntervening) {
-            orchestrator->isIntervening = true;
-            orchestrator->targetX = codeBot->x;
-            orchestrator->targetY = codeBot->y + 1;
-            orchestrator->speech = {"Voy a reparar a CodeBot", time + 5.0};
-            if (IsAudioDeviceReady()) PlaySound(sndRepair);
-            logs.push_back({"Orchestrator interviene para reparar CodeBot", GetTime(), {168,85,247,255}});
-        }
-        if (orchestrator->isIntervening && codeBot) {
-            float d = sqrtf(powf(orchestrator->x - codeBot->x, 2) + powf(orchestrator->y - (codeBot->y+1), 2));
-            if (d < 0.2f) {
-                if (!orchestrator->repairStartTime) orchestrator->repairStartTime = time;
-                if (time - orchestrator->repairStartTime > 4.0) {
-                    codeBot->hasCriticalError = false;
-                    codeBot->status = Status::Idle;
-                    orchestrator->isIntervening = false;
-                    orchestrator->repairStartTime = 0;
-                    orchestrator->targetX = 8;
-                    orchestrator->targetY = 8;
-                    orchestrator->speech = {"CodeBot reparado. Todo ok.", time + 4.0};
-                    if (IsAudioDeviceReady()) PlaySound(sndPass);
-                    logs.push_back({"Orchestrator reparo a CodeBot exitosamente", GetTime(), {16,185,129,255}});
-                    orchestrator->agentLog.push_back({"CodeBot reparado exitosamente", GetTime(), {16,185,129,255}});
-                    if (orchestrator->agentLog.size() > 50) orchestrator->agentLog.erase(orchestrator->agentLog.begin());
-                }
-            }
-        }
-    }
-
-    // Human proximity — mostrar indicador "disponible para charlar" cuando el humano se acerca
-    // Los bots NO hablan solos; solo muestran un icono de disponible
+    // ============================================================
+    // Proximidad del humano — indicador "disponible"
+    // ============================================================
     if (human) {
         for (auto& e : entities) {
             if (e.type == EntityType::Human) continue;
             float d = sqrtf(powf(e.x - human->x, 2) + powf(e.y - human->y, 2));
             if (d <= 3.0f) {
-                e.hasGreetedHuman = true;  // Marca para mostrar icono "💬"
+                e.hasGreetedHuman = true;
             } else if (d > 4.0f) {
                 e.hasGreetedHuman = false;
             }
         }
     }
 
-// Procesar respuestas del hilo LLM (no bloquea el main loop)
+    // ============================================================
+    // Procesar colaboraciones (bots que se mueven hacia otros)
+    // ============================================================
+    for (auto& col : g_collaborations) {
+        if (col.meetingDone) continue;
+
+        Entity* requester = nullptr;
+        Entity* helper = nullptr;
+        for (auto& e : entities) {
+            if (e.id == col.requesterId) requester = &e;
+            if (e.id == col.helperId) helper = &e;
+        }
+        if (!requester || !helper) { col.meetingDone = true; continue; }
+
+        float d = sqrtf(powf(requester->x - (helper->x + 1), 2) +
+                        powf(requester->y - helper->y, 2));
+
+        if (d < 0.5f && !col.meetingActive) {
+            // Llegaron, empezar reunion
+            col.meetingActive = true;
+            col.startTime = time;
+            requester->status = Status::Busy;
+            helper->status = Status::Busy;
+            requester->speech = {"Colaborando con " + helper->name, time + 10.0};
+            helper->speech = {"Colaborando con " + requester->name, time + 10.0};
+            if (IsAudioDeviceReady()) PlaySound(sndChat);
+            char logMsg[256];
+            snprintf(logMsg, sizeof(logMsg), "%s y %s colaborando", requester->name.c_str(), helper->name.c_str());
+            logs.push_back({logMsg, GetTime(), {168,85,247,255}});
+            requester->agentLog.push_back({"Colaboro con " + helper->name, GetTime(), requester->color});
+            helper->agentLog.push_back({"Colaboro con " + requester->name, GetTime(), helper->color});
+        }
+
+        if (col.meetingActive && time - col.startTime > col.meetingDuration) {
+            // Terminar colaboracion
+            col.meetingDone = true;
+            col.meetingActive = false;
+
+            // Marcar la tarea como completada
+            for (auto& task : g_tasks) {
+                if (task.id == col.taskId) {
+                    task.status = TaskStatus::Done;
+                    task.result = "Completada en colaboracion con " + helper->name;
+                    task.completedAt = time;
+                    break;
+                }
+            }
+
+            // Volver a home
+            requester->targetX = homeX(requester->type);
+            requester->targetY = homeY(requester->type);
+            requester->isActive = false;
+            requester->currentTask.clear();
+            requester->currentTaskId = -1;
+            requester->status = Status::Idle;
+            requester->speech = {"Tarea completada con " + helper->name, time + 5.0};
+
+            helper->status = Status::Idle;
+            helper->speech = {"Colaboracion terminada", time + 4.0};
+
+            if (IsAudioDeviceReady()) PlaySound(sndPass);
+            logs.push_back({"Colaboracion completada", GetTime(), {16,185,129,255}});
+            saveTasks();
+        }
+    }
+
+    // Limpiar colaboraciones terminadas
+    g_collaborations.erase(
+        std::remove_if(g_collaborations.begin(), g_collaborations.end(),
+            [](const Collaboration& c) { return c.meetingDone; }),
+        g_collaborations.end());
+
+    // ============================================================
+    // Procesar respuestas del hilo LLM
+    // ============================================================
     {
         std::lock_guard<std::mutex> lock(g_llmMutex);
         for (auto& res : g_llmResults) {
             for (auto& e : entities) {
                 if (e.id == res.entityId) {
-                    // Solo mostrar speech bubble si el chat está abierto con este agente
-                    // Si el chat se cerró, descartar la respuesta (no más habla solo)
                     if (g_showChat && g_chatTargetId == res.entityId) {
                         e.speech = {res.text, res.expiryTime};
-                        // Agregar al historial del chat
-                        if (!g_chatHistory.empty() && g_chatHistory.back().second == "🧠 pensando...")
+                        if (!g_chatHistory.empty() && g_chatHistory.back().second == "pensando...")
                             g_chatHistory.back().second = res.text;
                         else
                             g_chatHistory.push_back({"assistant", res.text});
                     }
-                    // Log del agente (siempre, para el panel de log)
                     e.agentLog.push_back({res.text, GetTime(), e.color});
                     if (e.agentLog.size() > 50) e.agentLog.erase(e.agentLog.begin());
                     break;
@@ -357,15 +431,19 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
         g_llmResults.clear();
     }
 
-// Limpiar speech bubbles expirados o si el chat se cerró
+    // ============================================================
+    // Limpiar speech bubbles expirados
+    // ============================================================
     for (auto& e : entities) {
         if (!e.speech.text.empty()) {
-            bool isSystemMsg = (e.speech.text.find("Bug") != std::string::npos ||
-                               e.speech.text.find("Voy a reparar") != std::string::npos ||
-                               e.speech.text.find("reparado") != std::string::npos ||
+            bool isSystemMsg = (e.speech.text.find("Voy con") != std::string::npos ||
+                               e.speech.text.find("Colaborando") != std::string::npos ||
+                               e.speech.text.find("Colaboracion") != std::string::npos ||
                                e.speech.text.find("Tarea") != std::string::npos ||
+                               e.speech.text.find("Iniciando") != std::string::npos ||
                                e.speech.text.find("Trabajando") != std::string::npos ||
-                               e.speech.text.find("Navegando") != std::string::npos);
+                               e.speech.text.find("Navegando") != std::string::npos ||
+                               e.speech.text.find("completada") != std::string::npos);
             if (time > e.speech.expiry || (!isSystemMsg && !(g_showChat && g_chatTargetId == e.id))) {
                 e.speech.text.clear();
             }
@@ -373,33 +451,76 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
     }
 
     // ============================================================
-    // Procesar tareas asignadas (multi-turn, no bloquea el frame)
+    // Procesar tareas (multi-turn + colaboracion entre bots)
     // ============================================================
     static double lastTaskProcess = 0;
-    if (time - lastTaskProcess > 2.0) {  // cada 2 segundos
+    if (time - lastTaskProcess > 2.0) {
         lastTaskProcess = time;
         for (auto& task : g_tasks) {
             if (task.status != TaskStatus::InProgress) continue;
-            // Buscar el agente asignado
+
             Entity* agent = nullptr;
             for (auto& e : entities) {
                 if (e.id == task.assignedTo) { agent = &e; break; }
             }
             if (!agent) { task.status = TaskStatus::Failed; task.result = "Agente no encontrado"; continue; }
 
-            // Procesar un step de la tarea
+            // ¿La tarea necesita colaboracion con otro bot?
+            // Si la descripcion menciona otro agente, iniciar colaboracion
+            std::string descLower = task.description;
+            for (auto& c : descLower) c = tolower(c);
+
+            bool needsCollab = false;
+            int helperId = -1;
+            std::string helperName;
+
+            if (descLower.find("codebot") != std::string::npos && agent->type != EntityType::CodeBot) {
+                Entity* helper = findBot(entities, EntityType::CodeBot);
+                if (helper && !helper->isActive) { needsCollab = true; helperId = helper->id; helperName = "CodeBot"; }
+            } else if (descLower.find("databot") != std::string::npos && agent->type != EntityType::DataBot) {
+                Entity* helper = findBot(entities, EntityType::DataBot);
+                if (helper && !helper->isActive) { needsCollab = true; helperId = helper->id; helperName = "DataBot"; }
+            } else if (descLower.find("orchestrator") != std::string::npos && agent->type != EntityType::Orchestrator) {
+                Entity* helper = findBot(entities, EntityType::Orchestrator);
+                if (helper && !helper->isActive) { needsCollab = true; helperId = helper->id; helperName = "Orchestrator"; }
+            }
+
+            if (needsCollab && helperId >= 0) {
+                // Verificar que no haya una colaboracion ya activa para esta tarea
+                bool alreadyCollabing = false;
+                for (auto& c : g_collaborations) {
+                    if (c.taskId == task.id && !c.meetingDone) { alreadyCollabing = true; break; }
+                }
+                if (!alreadyCollabing) {
+                    startCollaboration(agent->id, helperId, task.id, task.description, time, entities, logs);
+                    // Marcar que está esperando colaboracion
+                    task.steps.push_back("Esperando colaboracion con " + helperName);
+                    continue; // no procesar LLM todavia
+                }
+            }
+
+            // Si está colaborando, no procesar LLM todavia
+            bool isCollabing = false;
+            for (auto& c : g_collaborations) {
+                if (c.taskId == task.id && !c.meetingDone) { isCollabing = true; break; }
+            }
+            if (isCollabing) continue;
+
+            // Procesar un step normal de la tarea
             processTaskStep(task, *agent, logs);
         }
     }
 
-    // Auto-asignar tareas pendientes a agentes disponibles
+    // ============================================================
+    // Auto-asignar tareas pendientes
+    // ============================================================
     for (auto& task : g_tasks) {
         if (task.status != TaskStatus::Pending) continue;
-        if (task.assignedTo < 0) continue; // necesita asignación manual
+        if (task.assignedTo < 0) continue;
 
         Entity* agent = nullptr;
         for (auto& e : entities) {
-            if (e.id == task.assignedTo && !e.isActive && !e.hasCriticalError) {
+            if (e.id == task.assignedTo && !e.isActive) {
                 agent = &e; break;
             }
         }
@@ -413,6 +534,22 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
             agent->speech = {"Iniciando tarea...", time + 5.0};
             logs.push_back({TextFormat("%s inicia tarea #%d", agent->name.c_str(), task.id),
                            GetTime(), agent->color});
+        }
+    }
+
+    // ============================================================
+    // Bots inactivos vuelven a su posicion home
+    // ============================================================
+    for (auto& e : entities) {
+        if (e.type == EntityType::Human) continue;
+        if (!e.isActive && e.status != Status::Busy && e.status != Status::Intervening) {
+            float hx = homeX(e.type);
+            float hy = homeY(e.type);
+            float d = sqrtf(powf(e.x - hx, 2) + powf(e.y - hy, 2));
+            if (d > 1.0f) {
+                e.targetX = hx;
+                e.targetY = hy;
+            }
         }
     }
 
