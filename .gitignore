@@ -37,5 +37,8 @@ Thumbs.db
 *.zip
 *.tar
 
+# Archivos de ayuda para subir (contienen tokens)
+push-to-github.sh
+
 # Logs
 *.log
