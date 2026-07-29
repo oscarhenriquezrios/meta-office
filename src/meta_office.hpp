@@ -32,6 +32,12 @@ struct SpeechBubble {
     double expiry = 0;
 };
 
+struct LogEntry {
+    std::string text;
+    double time;
+    Color color;
+};
+
 struct Entity {
     int id = 0;
     std::string name;
@@ -50,12 +56,11 @@ struct Entity {
     bool hasGreetedHuman = false;
     bool isIntervening = false;
     double repairStartTime = 0;
-};
-
-struct LogEntry {
-    std::string text;
-    double time;
-    Color color;
+    // Log individual del agente
+    std::vector<LogEntry> agentLog;
+    // Si está activo (trabajando en una tarea asignada)
+    bool isActive = false;
+    std::string currentTask;
 };
 
 // Forward declarations
@@ -111,3 +116,9 @@ extern std::vector<std::pair<std::string, std::string>> g_chatHistory;
 extern std::string g_chatInput;
 void openChat(int entityId);
 void closeChat();
+
+// Log panel (ver log de un agente)
+extern bool g_showLog;
+extern int g_logTargetId;
+void openLogPanel(int entityId);
+void closeLogPanel();

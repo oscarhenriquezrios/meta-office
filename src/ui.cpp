@@ -11,10 +11,8 @@ static bool inputActive = false;
 void toggleLlmConfig() {
     g_showLlmConfig = !g_showLlmConfig;
     if (g_showLlmConfig) {
-        // Cargar valores actuales en los buffers
         strncpy(inputEndpoint, g_llmConfig.endpoint.c_str(), sizeof(inputEndpoint)-1);
         strncpy(inputApiKey, g_llmConfig.apiKey.c_str(), sizeof(inputApiKey)-1);
-        // Ofuscar key parcialmente para mostrar
         if (strlen(inputApiKey) > 8) {
             for (size_t i = 4; i < strlen(inputApiKey)-4; i++)
                 inputApiKey[i] = '*';
@@ -41,7 +39,7 @@ static bool drawButton(Rectangle btn, const char* label, Color bg, int fontSize)
 static void drawTextField(Rectangle field, const char* label, const char* value, bool active) {
     DrawText(label, field.x - 110, field.y + 4, 12, {148,163,184,255});
     DrawRectangle(field.x, field.y, field.width, field.height,
-                  active ? alpha({56,189,248}, 30) : alpha(WHITE, 8));
+                  active ? alpha({56,189,248,255}, 30) : alpha(WHITE, 8));
     DrawRectangleLines(field.x, field.y, field.width, field.height,
                        active ? (Color){56,189,248,200} : (Color){255,255,255,25});
     DrawText(value, field.x + 8, field.y + 5, 11, active ? WHITE : (Color){180,190,205,255});
@@ -54,31 +52,26 @@ static void drawTextField(Rectangle field, const char* label, const char* value,
 void drawLlmConfigPanel() {
     if (!g_showLlmConfig) return;
 
-    // Fondo semi-transparente
     DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 180));
 
     int pw = 540, ph = 400;
     int px = (screenW - pw) / 2;
     int py = (screenH - ph) / 2;
 
-    // Panel con sombra
     DrawRectangleRounded({(float)px+4, (float)py+4, (float)pw, (float)ph}, 0.06f, 6, alpha(BLACK, 100));
     DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,245});
     DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {56,189,248,120});
 
-    // Header con degradado
-    DrawRectangleRounded({(float)px, (float)py, (float)pw, 50}, 0.06f, 6, alpha({56,189,248}, 20));
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, 50}, 0.06f, 6, alpha({56,189,248,255}, 20));
     DrawText("CONFIGURACION LLM", px + 24, py + 14, 18, WHITE);
     DrawText("Protocolo compatible con OpenAI API", px + 24, py + 36, 11, {148,163,184,255});
 
     int yy = py + 68;
     int fieldW = pw - 150;
 
-    // Endpoint
     drawTextField({(float)px + 130, (float)yy, (float)fieldW, 26}, "Endpoint:", inputEndpoint, editField == 1);
     yy += 38;
 
-    // API Key
     std::string display = inputApiKey;
     if (display.length() > 8) {
         display = display.substr(0, 4) + "...." + display.substr(display.length()-4);
@@ -86,11 +79,9 @@ void drawLlmConfigPanel() {
     drawTextField({(float)px + 130, (float)yy, (float)fieldW, 26}, "API Key:", display.c_str(), editField == 2);
     yy += 38;
 
-    // Model
     drawTextField({(float)px + 130, (float)yy, (float)fieldW, 26}, "Modelo:", inputModel, editField == 3);
     yy += 56;
 
-    // Botones
     Rectangle btnSave = {(float)px + 20, (float)yy, 150, 34};
     Rectangle btnTest = {(float)px + 190, (float)yy, 120, 34};
     Rectangle btnClose = {(float)px + pw - 130, (float)yy, 110, 34};
@@ -126,7 +117,6 @@ void drawLlmConfigPanel() {
         g_showLlmConfig = false;
     }
 
-    // Ayuda
     yy += 54;
     DrawText("Proveedores compatibles:", px + 24, yy, 10, {100,116,139,255});
     yy += 16;
@@ -138,7 +128,6 @@ void drawLlmConfigPanel() {
     yy += 13;
     DrawText("Local:     http://localhost:11434/v1/chat/completions", px + 24, yy, 9, {148,163,184,255});
 
-    // Input handling para campos de texto
     if (inputActive && editField > 0) {
         int key = GetCharPressed();
         while (key > 0) {
@@ -182,24 +171,20 @@ void drawChatPanel(const std::vector<Entity>& entities) {
     int px = (screenW - pw) / 2;
     int py = (screenH - ph) / 2 - 30;
 
-    // Fondo
     DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 160));
-    // Sombra
     DrawRectangleRounded({(float)px+4, (float)py+4, (float)pw, (float)ph}, 0.06f, 6, alpha(BLACK, 100));
     DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,245});
     DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, alpha(target->color, 180));
 
-    // Header con color del agente
+    // Header
     DrawRectangleRounded({(float)px, (float)py, (float)pw, 46}, 0.06f, 6, alpha(target->color, 35));
-    // Icono
-    const char* icon = "🤖";
-    if (target->type == EntityType::Human) icon = "👤";
-    else if (target->type == EntityType::CodeBot) icon = "🤖";
-    else if (target->type == EntityType::DataBot) icon = "📊";
-    else if (target->type == EntityType::Orchestrator) icon = "🔮";
-    DrawText(icon, px + 16, py + 12, 18, WHITE);
-    DrawText(TextFormat("Chat con %s", target->name.c_str()), px + 42, py + 10, 14, WHITE);
-    DrawText(target->role.c_str(), px + 42, py + 28, 10, {148,163,184,255});
+    const char* icon = "BOT";
+    if (target->type == EntityType::Human) icon = "USR";
+    else if (target->type == EntityType::DataBot) icon = "DAT";
+    else if (target->type == EntityType::Orchestrator) icon = "ORQ";
+    DrawText(icon, px + 16, py + 14, 14, WHITE);
+    DrawText(TextFormat("Chat con %s", target->name.c_str()), px + 52, py + 10, 14, WHITE);
+    DrawText(target->role.c_str(), px + 52, py + 28, 10, {148,163,184,255});
 
     // Botón cerrar
     Rectangle btnClose = {(float)px + pw - 40, (float)py + 6, 32, 32};
@@ -218,7 +203,6 @@ void drawChatPanel(const std::vector<Entity>& entities) {
     int maxMsg = ph - 160;
     int start = std::max(0, (int)g_chatHistory.size() - 20);
 
-    // Mensaje de bienvenida si no hay historial
     if (g_chatHistory.empty()) {
         DrawText("Escribe un mensaje para hablarle al agente.", px + 24, msgY, 11, {100,116,139,255});
         DrawText("Enter para enviar | ESC para cerrar", px + 24, msgY + 18, 10, {80,90,105,255});
@@ -227,10 +211,9 @@ void drawChatPanel(const std::vector<Entity>& entities) {
     for (int i = start; i < (int)g_chatHistory.size(); i++) {
         if (msgY - yy > maxMsg) break;
         bool isAgent = (g_chatHistory[i].first == "assistant");
-        Color bg = isAgent ? alpha(target->color, 25) : alpha({56,189,248}, 18);
+        Color bg = isAgent ? alpha(target->color, 25) : alpha({56,189,248,255}, 18);
         float bubbleX = isAgent ? px + 18 : px + 60;
         float bubbleW = pw - 80;
-        // Medir texto
         int tw = MeasureText(g_chatHistory[i].second.c_str(), 10);
         float actualW = std::min((float)tw + 20, bubbleW);
         if (!isAgent) bubbleX = px + pw - actualW - 30;
@@ -238,7 +221,6 @@ void drawChatPanel(const std::vector<Entity>& entities) {
         DrawRectangleRounded({bubbleX, (float)msgY, actualW, 24}, 0.2f, 4, bg);
         DrawRectangleRoundedLines({bubbleX, (float)msgY, actualW, 24}, 0.2f, 4, alpha(bg, 200));
 
-        // Texto truncado
         std::string text = g_chatHistory[i].second;
         if ((int)text.size() > 80) text = text.substr(0, 77) + "...";
         DrawText(text.c_str(), bubbleX + 10, msgY + 6, 10,
@@ -246,22 +228,95 @@ void drawChatPanel(const std::vector<Entity>& entities) {
         msgY += 28;
     }
 
-    // Input box mejorado
+    // Input box
     int iy = py + ph - 70;
     DrawRectangle(px + 12, iy, pw - 24, 32, alpha(WHITE, 8));
     DrawRectangleLines(px + 12, iy, pw - 24, 32, alpha(target->color, 60));
     DrawText(g_chatInput.c_str(), px + 20, iy + 8, 11, WHITE);
-    // Cursor parpadeante
     if ((int)(GetTime() * 2) % 2 == 0) {
         int tw = MeasureText(g_chatInput.c_str(), 11);
         DrawText("|", px + 20 + tw + 1, iy + 8, 11, WHITE);
     }
-    // Placeholder
     if (g_chatInput.empty()) {
         DrawText("Escribe aqui...", px + 20, iy + 8, 11, {80,90,105,255});
     }
-    // Hint
     DrawText("Enter: enviar | ESC: cerrar", px + 12, iy + 38, 9, {80,90,105,255});
+}
+
+// ============================================================
+// Log Panel — ver el log individual de un agente
+// ============================================================
+void drawLogPanel(const std::vector<Entity>& entities) {
+    if (!g_showLog) return;
+
+    Entity* target = nullptr;
+    for (auto& e : entities) if (e.id == g_logTargetId) { target = const_cast<Entity*>(&e); break; }
+    if (!target) { closeLogPanel(); return; }
+
+    int pw = 460, ph = 440;
+    int px = (screenW - pw) / 2;
+    int py = (screenH - ph) / 2 - 20;
+
+    // Fondo
+    DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 160));
+    DrawRectangleRounded({(float)px+4, (float)py+4, (float)pw, (float)ph}, 0.06f, 6, alpha(BLACK, 100));
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,245});
+    DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, alpha(target->color, 180));
+
+    // Header
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, 50}, 0.06f, 6, alpha(target->color, 35));
+    DrawText("LOG", px + 16, py + 10, 18, WHITE);
+    DrawText(target->name.c_str(), px + 60, py + 10, 14, WHITE);
+    DrawText(target->role.c_str(), px + 60, py + 28, 10, {148,163,184,255});
+
+    // Stats rápidas
+    DrawText(TextFormat("Tests: %d", target->testCount), px + pw - 140, py + 12, 11, {56,189,248,255});
+    DrawText(TextFormat("Queries: %d", target->queryCount), px + pw - 140, py + 28, 11, {16,185,129,255});
+
+    // Botón cerrar
+    Rectangle btnClose = {(float)px + pw - 40, (float)py + 8, 32, 32};
+    if (drawButton(btnClose, "X", alpha(RED, 100), 14)) {
+        closeLogPanel();
+        return;
+    }
+
+    // Area de log
+    int logY = py + 58;
+    int logH = ph - 70;
+    DrawRectangle(px + 12, logY, pw - 24, logH, alpha(BLACK, 100));
+    DrawRectangleLines(px + 12, logY, pw - 24, logH, alpha(WHITE, 15));
+
+    if (target->agentLog.empty()) {
+        DrawText("Sin actividad registrada.", px + 24, logY + 14, 11, {100,116,139,255});
+        DrawText("Este agente aun no ha trabajado.", px + 24, logY + 32, 10, {80,90,105,255});
+    }
+
+    int entryY = logY + 10;
+    int maxEntries = logH - 20;
+    int startIdx = std::max(0, (int)target->agentLog.size() - 25);
+
+    for (int i = startIdx; i < (int)target->agentLog.size(); i++) {
+        if (entryY - logY > maxEntries) break;
+        auto& entry = target->agentLog[i];
+
+        // Fila con fondo alterno
+        bool altRow = (i % 2 == 0);
+        DrawRectangle(px + 14, entryY - 2, pw - 28, 14, altRow ? alpha(WHITE, 4) : alpha(BLACK, 0));
+
+        // Bullet de color
+        DrawCircle(px + 20, entryY + 5, 2, entry.color);
+
+        // Texto truncado
+        std::string text = entry.text;
+        if ((int)text.size() > 55) text = text.substr(0, 52) + "...";
+        DrawText(text.c_str(), px + 28, entryY, 9, entry.color);
+
+        entryY += 15;
+    }
+
+    // Footer
+    DrawText(TextFormat("%zu entradas", target->agentLog.size()), px + 16, py + ph - 18, 10, {100,116,139,255});
+    DrawText("ESC: cerrar", px + pw - 90, py + ph - 18, 10, {100,116,139,255});
 }
 
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
@@ -279,15 +334,13 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     }
     DrawLineEx({0, 50}, {(float)screenW, 50}, 2, {56,189,248,40});
 
-    // Logo / titulo
     DrawText("META-OFFICE", 20, 12, 20, WHITE);
     DrawText("2D", 20 + MeasureText("META-OFFICE", 20) + 6, 16, 12, {56,189,248,255});
     DrawText("Oficina Virtual C++", 180, 20, 11, {148,163,184,255});
 
-    // Estado LLM indicador
     bool llmOk = !g_llmConfig.apiKey.empty() && g_llmConfig.apiKey != "sk-...";
     float llmPulse = sinf(GetTime() * 2) * 0.3f + 0.7f;
-    DrawCircle(380, 22, 5, llmOk ? alpha({16,185,129}, (int)(255 * llmPulse)) : ORANGE);
+    DrawCircle(380, 22, 5, llmOk ? alpha({16,185,129,255}, (int)(255 * llmPulse)) : ORANGE);
     DrawText(llmOk ? "LLM Conectado" : "LLM sin config", 392, 16, 11,
              llmOk ? (Color){16,185,129,255} : ORANGE);
 
@@ -296,29 +349,25 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
         DrawText(TextFormat("Pos: (%.0f, %.0f)", h.x, h.y), 520, 18, 12, {148,163,184,255});
     }
 
-    // Estado de simulacion
     DrawCircle(screenW - 260, 16, 5, paused ? ORANGE : GREEN);
     DrawText(paused ? "PAUSADO" : "EN TIEMPO REAL", screenW - 248, 12, 12,
              paused ? ORANGE : GREEN);
 
-    // Botón Config LLM (engranaje)
     Rectangle btnConfig = {(float)screenW - 170, 8, 40, 34};
     bool configHover = CheckCollisionPointRec(GetMousePosition(), btnConfig);
-    DrawRectangleRounded(btnConfig, 0.2f, 4, g_showLlmConfig ? alpha({56,189,248}, 60) : alpha(WHITE, configHover ? 15 : 8));
+    DrawRectangleRounded(btnConfig, 0.2f, 4, g_showLlmConfig ? alpha({56,189,248,255}, 60) : alpha(WHITE, configHover ? 15 : 8));
     DrawRectangleRoundedLines(btnConfig, 0.2f, 4, g_showLlmConfig ? (Color){56,189,248,200} : alpha(WHITE, 30));
     DrawText("CFG", btnConfig.x + 6, btnConfig.y + 9, 12, WHITE);
     if (configHover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         toggleLlmConfig();
     }
 
-    // Botón Pausar
     Rectangle btnPause = {(float)screenW - 120, 8, 110, 34};
     drawButton(btnPause, paused ? "REANUDAR" : "PAUSAR",
                paused ? (Color){245,158,11,80} : alpha(WHITE, 12), 13);
 
     // ===== SIDEBAR =====
     int sx = screenW - 300;
-    // Fondo sidebar
     for (int y = 50; y < screenH; y++) {
         float t = (float)(y - 50) / (screenH - 50);
         Color c = {
@@ -331,7 +380,6 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     }
     DrawLineEx({(float)sx, 50}, {(float)sx, (float)screenH}, 2, {56,189,248,30});
 
-    // Header sidebar
     DrawText("MIEMBROS", sx + 16, 60, 14, {148,163,184,255});
     DrawText(TextFormat("(%zu)", entities.size()), sx + 106, 60, 14, {100,116,139,255});
     DrawLineEx({(float)sx + 12, 78}, {(float)screenW - 12, 78}, 1, alpha(WHITE, 10));
@@ -342,7 +390,6 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
         bool hover = CheckCollisionPointRec(GetMousePosition(), {(float)sx + 10, (float)yy, 280, 62});
         Rectangle card = {(float)sx + 10, (float)yy, 280, 62};
 
-        // Sombra tarjeta
         DrawRectangleRounded({card.x + 2, card.y + 2, card.width, card.height}, 0.08f, 4, alpha(BLACK, 50));
         DrawRectangleRounded(card, 0.08f, 4, sel ? alpha(e.color, 35) : alpha(WHITE, hover ? 10 : 4));
         DrawRectangleRoundedLines(card, 0.08f, 4, sel ? e.color : alpha(WHITE, hover ? 25 : 12));
@@ -353,21 +400,17 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
         else if (e.type == EntityType::DataBot) icon = "DAT";
         else if (e.type == EntityType::Orchestrator) icon = "ORQ";
 
-        // Icono con fondo de color
         DrawRectangleRounded({(float)sx + 18, (float)yy + 10, 36, 36}, 0.15f, 4, e.color);
         DrawText(icon, sx + 22, yy + 18, 10, WHITE);
 
-        // Nombre y rol
         DrawText(e.name.c_str(), sx + 62, yy + 13, 13, WHITE);
         DrawText(e.role.c_str(), sx + 62, yy + 30, 9, {148,163,184,255});
 
-        // Stats
         if (e.testCount > 0)
             DrawText(TextFormat("Tests: %d", e.testCount), sx + 62, yy + 44, 9, {56,189,248,180});
         if (e.queryCount > 0)
             DrawText(TextFormat("Queries: %d", e.queryCount), sx + 130, yy + 44, 9, {16,185,129,180});
 
-        // Estado
         const char* st = "IDLE";
         Color sc = {148,163,184,255};
         if (e.status == Status::Walking) { st = "ACTIVO"; sc = {56,189,248,255}; }
@@ -375,15 +418,17 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
         else if (e.status == Status::Busy) { st = "OCUPADO"; sc = ORANGE; }
         else if (e.status == Status::Intervening) { st = "AYUDANDO"; sc = {168,85,247,255}; }
 
-        // Indicador de estado (punto)
         DrawCircle(sx + 216, yy + 18, 4, sc);
         DrawText(st, sx + 226, yy + 14, 10, sc);
 
-        // Indicador "disponible"
+        // Indicador de entradas en log
+        if (!e.agentLog.empty() && e.type != EntityType::Human) {
+            DrawText(TextFormat("[%zu]", e.agentLog.size()), sx + 260, yy + 14, 9, alpha(e.color, 180));
+        }
+
         if (e.hasGreetedHuman && e.type != EntityType::Human) {
             float bounce = sinf(GetTime() * 4) * 2;
-            DrawCircle(sx + 260, yy + 18 + bounce, 4, alpha(e.color, 200));
-            DrawText(">", sx + 252, yy + 13 + bounce, 10, WHITE);
+            DrawCircle(sx + 260, yy + 38 + bounce, 3, alpha(e.color, 200));
         }
 
         yy += 68;
@@ -399,31 +444,46 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
 
     int start = std::max(0, (int)logs.size() - 9);
     for (int i = start; i < (int)logs.size(); i++) {
-        // Punto de color
         DrawCircle(sx + 18, yy + 5, 2, logs[i].color);
         DrawText(logs[i].text.c_str(), sx + 26, yy, 9, logs[i].color);
         yy += 14;
     }
 
     // ===== HUD inferior =====
-    // Fondo degradado del HUD
-    for (int x = 0; x < 540; x++) {
-        float t = 1.0f - (float)x / 540;
+    for (int x = 0; x < 620; x++) {
+        float t = 1.0f - (float)x / 620;
         Color c = {0, 0, 0, (unsigned char)(160 * t)};
         DrawLine(10 + x, screenH - 40, 10 + x, screenH - 10, c);
     }
-    DrawText("WASD: mover | Clic agente: charlar | Clic mapa: mover | P: pausar | CFG: config LLM",
+    DrawText("Clic izq: charlar | Clic der: log | WASD: mover | P: pausar | CFG: config",
              18, screenH - 33, 12, {148,163,184,255});
 
-    // ===== LLM Config Panel (overlay) =====
+    // ===== Overlays =====
     drawLlmConfigPanel();
-
-    // ===== Chat Panel =====
     drawChatPanel(entities);
+    drawLogPanel(entities);
 }
 
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
                  int& selectedId, bool& paused, float& panY) {
+    // Si el log panel está abierto, solo ESC para cerrar
+    if (g_showLog) {
+        if (IsKeyPressed(KEY_ESCAPE)) closeLogPanel();
+        // Click en botón cerrar del log panel se maneja en drawLogPanel
+        // Pero necesitamos capturar clicks aquí para que no pasen al mapa
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            // Verificar si el click fue fuera del panel
+            int pw = 460, ph = 440;
+            int px = (screenW - pw) / 2;
+            int py = (screenH - ph) / 2 - 20;
+            Vector2 mp = GetMousePosition();
+            if (!CheckCollisionPointRec(mp, {(float)px, (float)py, (float)pw, (float)ph})) {
+                closeLogPanel();
+            }
+        }
+        return;
+    }
+
     // Si el chat está abierto, el input va al chat
     if (g_showChat) {
         int key = GetCharPressed();
@@ -435,13 +495,11 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
         if (IsKeyPressed(KEY_BACKSPACE) && !g_chatInput.empty())
             g_chatInput.pop_back();
         if (IsKeyPressed(KEY_ENTER) && !g_chatInput.empty()) {
-            // Enviar mensaje al LLM
             Entity* target = nullptr;
             for (auto& e : entities) if (e.id == g_chatTargetId) { target = &e; break; }
             if (target && !g_llmConfig.apiKey.empty() && g_llmConfig.apiKey != "sk-...") {
                 g_chatHistory.push_back({"user", g_chatInput});
                 g_chatHistory.push_back({"assistant", "🧠 pensando..."});
-                // Encolar con historial completo como contexto
                 std::string fullPrompt = g_chatInput;
                 std::lock_guard<std::mutex> lock(g_llmMutex);
                 g_llmQueue.push({g_chatTargetId, getSystemPrompt(target->type), fullPrompt, GetTime() + 15.0});
@@ -452,9 +510,7 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
         return;
     }
 
-    // No procesar input normal si el panel de config está abierto
     if (g_showLlmConfig) {
-        // Click en campos de texto para activar edición
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 mp = GetMousePosition();
             int pw = 540;
@@ -464,21 +520,18 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
             int yy = py + 68;
             int fieldW = pw - 150;
 
-            // Endpoint field
             if (mp.x > px + labelW && mp.x < px + labelW + fieldW &&
                 mp.y > yy && mp.y < yy + 26) {
                 editField = 1; inputActive = true;
                 strncpy(inputEndpoint, g_llmConfig.endpoint.c_str(), sizeof(inputEndpoint)-1);
             }
             yy += 38;
-            // API Key field
             if (mp.x > px + labelW && mp.x < px + labelW + fieldW &&
                 mp.y > yy && mp.y < yy + 26) {
                 editField = 2; inputActive = true;
                 strncpy(inputApiKey, g_llmConfig.apiKey.c_str(), sizeof(inputApiKey)-1);
             }
             yy += 38;
-            // Model field
             if (mp.x > px + labelW && mp.x < px + labelW + fieldW &&
                 mp.y > yy && mp.y < yy + 26) {
                 editField = 3; inputActive = true;
@@ -490,13 +543,80 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
 
     if (IsKeyPressed(KEY_P)) paused = !paused;
 
-    // Botón CFG en top bar
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mp = GetMousePosition();
+
         Rectangle btnConfig = {(float)screenW - 170, 8, 40, 34};
         if (CheckCollisionPointRec(mp, btnConfig)) {
             toggleLlmConfig();
             return;
+        }
+
+        Rectangle btnPause = {(float)screenW - 120, 8, 110, 34};
+        if (CheckCollisionPointRec(mp, btnPause)) {
+            paused = !paused;
+            return;
+        }
+
+        // Click en sidebar — clic izq abre chat, clic der abre log
+        int sxx = screenW - 300;
+        for (int i = 0; i < (int)entities.size(); i++) {
+            Rectangle card = {(float)sxx + 10, (float)(86 + i * 68), 280, 62};
+            if (CheckCollisionPointRec(mp, card)) {
+                selectedId = entities[i].id;
+                openChat(entities[i].id);
+                break;
+            }
+        }
+
+        // Click en mapa
+        if (mp.x < screenW - 300) {
+            Vector2 grid = isoToGrid(mp.x, mp.y, origin);
+            int gx = roundf(grid.x), gy = roundf(grid.y);
+            if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
+                bool clickedAgent = false;
+                for (auto& e : entities) {
+                    if (e.type == EntityType::Human) continue;
+                    float d = sqrtf(powf(e.renderX - gx, 2) + powf(e.renderY - gy, 2));
+                    if (d < 1.5f) { selectedId = e.id; openChat(e.id); clickedAgent = true; break; }
+                }
+                if (!clickedAgent) {
+                    auto* human = entities.empty() ? nullptr : &entities[0];
+                    if (human) {
+                        human->targetX = gx;
+                        human->targetY = gy;
+                        selectedId = -1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Clic derecho → abrir log panel
+    if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+        Vector2 mp = GetMousePosition();
+
+        // Sidebar
+        int sxx = screenW - 300;
+        for (int i = 0; i < (int)entities.size(); i++) {
+            Rectangle card = {(float)sxx + 10, (float)(86 + i * 68), 280, 62};
+            if (CheckCollisionPointRec(mp, card)) {
+                openLogPanel(entities[i].id);
+                return;
+            }
+        }
+
+        // Mapa
+        if (mp.x < screenW - 300) {
+            Vector2 grid = isoToGrid(mp.x, mp.y, origin);
+            int gx = roundf(grid.x), gy = roundf(grid.y);
+            if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
+                for (auto& e : entities) {
+                    if (e.type == EntityType::Human) continue;
+                    float d = sqrtf(powf(e.renderX - gx, 2) + powf(e.renderY - gy, 2));
+                    if (d < 1.5f) { openLogPanel(e.id); break; }
+                }
+            }
         }
     }
 
@@ -510,42 +630,6 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
         if (nx != human->targetX || ny != human->targetY) {
             human->targetX = nx;
             human->targetY = ny;
-        }
-    }
-
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        Vector2 mp = GetMousePosition();
-
-        // Botón pausar en top bar
-        Rectangle btnPause = {(float)screenW - 120, 8, 110, 34};
-        if (CheckCollisionPointRec(mp, btnPause)) {
-            paused = !paused;
-            return;
-        }
-
-        if (mp.x < screenW - 300) {
-            Vector2 grid = isoToGrid(mp.x, mp.y, origin);
-            int gx = roundf(grid.x), gy = roundf(grid.y);
-            if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
-                bool clickedAgent = false;
-                for (auto& e : entities) {
-                    if (e.type == EntityType::Human) continue;
-                    float d = sqrtf(powf(e.renderX - gx, 2) + powf(e.renderY - gy, 2));
-                    if (d < 1.5f) { selectedId = e.id; openChat(e.id); clickedAgent = true; break; }
-                }
-                if (!clickedAgent && human) {
-                    human->targetX = gx;
-                    human->targetY = gy;
-                    selectedId = -1;
-                }
-            }
-        }
-
-        // Click en sidebar
-        int sxx = screenW - 300;
-        for (int i = 0; i < (int)entities.size(); i++) {
-            Rectangle card = {(float)sxx + 10, (float)(86 + i * 68), 280, 62};
-            if (CheckCollisionPointRec(mp, card)) { selectedId = entities[i].id; openChat(entities[i].id); break; }
         }
     }
 

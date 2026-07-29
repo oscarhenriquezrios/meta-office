@@ -10,6 +10,8 @@ bool g_showChat = false;
 int g_chatTargetId = -1;
 std::vector<std::pair<std::string, std::string>> g_chatHistory;
 std::string g_chatInput;
+bool g_showLog = false;
+int g_logTargetId = -1;
 
 // Cola de LLM async
 std::queue<LlmRequest> g_llmQueue;
@@ -254,10 +256,13 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                 codeBot->speech = {"⚠ Bug critico detectado!", time + 5.0};
                 if (IsAudioDeviceReady()) PlaySound(sndFail);
                 logs.push_back({"CodeBot detecto un BUG CRITICO!", GetTime(), {244,63,94,255}});
+                codeBot->agentLog.push_back({"Bug critico en test #" + std::to_string(codeBot->testCount), GetTime(), {244,63,94,255}});
             } else {
                 if (IsAudioDeviceReady()) PlaySound(sndPass);
                 logs.push_back({TextFormat("CodeBot: test #%d PASSED", codeBot->testCount), GetTime(), {56,189,248,255}});
+                codeBot->agentLog.push_back({"Test #" + std::to_string(codeBot->testCount) + " PASSED", GetTime(), {56,189,248,255}});
             }
+            if (codeBot->agentLog.size() > 50) codeBot->agentLog.erase(codeBot->agentLog.begin());
         }
     }
 
@@ -268,6 +273,8 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
             dataBot->lastActionTime = time;
             dataBot->queryCount++;
             logs.push_back({TextFormat("DataBot: query #%d ejecutada", dataBot->queryCount), GetTime(), {16,185,129,255}});
+            dataBot->agentLog.push_back({"Query #" + std::to_string(dataBot->queryCount) + " ejecutada", GetTime(), {16,185,129,255}});
+            if (dataBot->agentLog.size() > 50) dataBot->agentLog.erase(dataBot->agentLog.begin());
         }
     }
 
@@ -295,6 +302,8 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                     orchestrator->speech = {"CodeBot reparado. Todo ok.", time + 4.0};
                     if (IsAudioDeviceReady()) PlaySound(sndPass);
                     logs.push_back({"Orchestrator reparo a CodeBot exitosamente", GetTime(), {16,185,129,255}});
+                    orchestrator->agentLog.push_back({"CodeBot reparado exitosamente", GetTime(), {16,185,129,255}});
+                    if (orchestrator->agentLog.size() > 50) orchestrator->agentLog.erase(orchestrator->agentLog.begin());
                 }
             }
         }
@@ -314,21 +323,25 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
         }
     }
 
-    // Procesar respuestas del hilo LLM (no bloquea el main loop)
+// Procesar respuestas del hilo LLM (no bloquea el main loop)
     {
         std::lock_guard<std::mutex> lock(g_llmMutex);
         for (auto& res : g_llmResults) {
             for (auto& e : entities) {
                 if (e.id == res.entityId) {
-                    e.speech = {res.text, res.expiryTime};
-                    // Si el chat está abierto con este agente, agregar al historial
-                    if (g_showChat && g_chatTargetId == res.entityId && !g_chatHistory.empty()) {
-                        // Reemplazar el último "🧠 pensando..." con la respuesta real
+                    // Solo mostrar speech bubble si el chat está abierto con este agente
+                    // Si el chat se cerró, descartar la respuesta (no más habla solo)
+                    if (g_showChat && g_chatTargetId == res.entityId) {
+                        e.speech = {res.text, res.expiryTime};
+                        // Agregar al historial del chat
                         if (!g_chatHistory.empty() && g_chatHistory.back().second == "🧠 pensando...")
                             g_chatHistory.back().second = res.text;
                         else
                             g_chatHistory.push_back({"assistant", res.text});
                     }
+                    // Log del agente (siempre, para el panel de log)
+                    e.agentLog.push_back({res.text, GetTime(), e.color});
+                    if (e.agentLog.size() > 50) e.agentLog.erase(e.agentLog.begin());
                     break;
                 }
             }
@@ -336,10 +349,17 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
         g_llmResults.clear();
     }
 
-    // Limpiar speech bubbles expirados
+    // Limpiar speech bubbles expirados o si el chat se cerró
     for (auto& e : entities) {
-        if (!e.speech.text.empty() && time > e.speech.expiry) {
-            e.speech.text.clear();
+        if (!e.speech.text.empty()) {
+            // Limpiar si expiró o si no hay chat activo con este agente
+            // (excepto mensajes del sistema como bugs)
+            bool isSystemMsg = (e.speech.text.find("Bug") != std::string::npos ||
+                               e.speech.text.find("Voy a reparar") != std::string::npos ||
+                               e.speech.text.find("reparado") != std::string::npos);
+            if (time > e.speech.expiry || (!isSystemMsg && !(g_showChat && g_chatTargetId == e.id))) {
+                e.speech.text.clear();
+            }
         }
     }
 
@@ -358,4 +378,14 @@ void closeChat() {
     g_chatTargetId = -1;
     g_chatHistory.clear();
     g_chatInput.clear();
+}
+
+void openLogPanel(int entityId) {
+    g_logTargetId = entityId;
+    g_showLog = true;
+}
+
+void closeLogPanel() {
+    g_showLog = false;
+    g_logTargetId = -1;
 }
