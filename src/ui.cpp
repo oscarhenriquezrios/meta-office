@@ -319,6 +319,195 @@ void drawLogPanel(const std::vector<Entity>& entities) {
     DrawText("ESC: cerrar", px + pw - 90, py + ph - 18, 10, {100,116,139,255});
 }
 
+// ============================================================
+// Task Panel — crear y ver tareas
+// ============================================================
+static char taskInput[256] = "";
+static bool taskInputActive = false;
+static int taskAssignTarget = -1; // ID del agente a asignar
+
+static const char* taskStatusStr(TaskStatus s) {
+    switch (s) {
+        case TaskStatus::Pending: return "PENDIENTE";
+        case TaskStatus::InProgress: return "EN PROGRESO";
+        case TaskStatus::Done: return "COMPLETADA";
+        case TaskStatus::Failed: return "FALLIDA";
+    }
+    return "?";
+}
+
+static Color taskStatusColor(TaskStatus s) {
+    switch (s) {
+        case TaskStatus::Pending: return {148,163,184,255};
+        case TaskStatus::InProgress: return {56,189,248,255};
+        case TaskStatus::Done: return {16,185,129,255};
+        case TaskStatus::Failed: return {244,63,94,255};
+    }
+    return WHITE;
+}
+
+void drawTaskPanel(const std::vector<Entity>& entities) {
+    if (!g_showTaskPanel) return;
+
+    int pw = 500, ph = 480;
+    int px = (screenW - pw) / 2;
+    int py = (screenH - ph) / 2;
+
+    DrawRectangle(0, 0, screenW, screenH, alpha(BLACK, 160));
+    DrawRectangleRounded({(float)px+4, (float)py+4, (float)pw, (float)ph}, 0.06f, 6, alpha(BLACK, 100));
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {15,23,42,245});
+    DrawRectangleRoundedLines({(float)px, (float)py, (float)pw, (float)ph}, 0.06f, 6, {245,158,11,180});
+
+    // Header
+    DrawRectangleRounded({(float)px, (float)py, (float)pw, 50}, 0.06f, 6, alpha({245,158,11,255}, 25));
+    DrawText("TAREAS", px + 20, py + 12, 18, WHITE);
+    DrawText(TextFormat("(%zu total)", g_tasks.size()), px + 120, py + 16, 12, {148,163,184,255});
+
+    // Botón cerrar
+    Rectangle btnClose = {(float)px + pw - 40, (float)py + 8, 32, 32};
+    if (drawButton(btnClose, "X", alpha(RED, 100), 14)) {
+        closeTaskPanel();
+        return;
+    }
+
+    // Sección crear tarea
+    int yy = py + 60;
+    DrawText("NUEVA TAREA", px + 20, yy, 13, {245,158,11,255});
+    yy += 22;
+
+    // Input de descripción
+    DrawRectangle(px + 20, yy, pw - 40, 30, taskInputActive ? alpha({245,158,11,255}, 20) : alpha(WHITE, 8));
+    DrawRectangleLines(px + 20, yy, pw - 40, 30, taskInputActive ? (Color){245,158,11,180} : alpha(WHITE, 20));
+    DrawText(taskInput, px + 28, yy + 8, 12, WHITE);
+    if (taskInputActive && (int)(GetTime() * 2) % 2 == 0) {
+        int tw = MeasureText(taskInput, 12);
+        DrawText("|", px + 28 + tw + 1, yy + 8, 12, WHITE);
+    }
+    if (!taskInputActive && strlen(taskInput) == 0)
+        DrawText("Ej: Investiga precios de VPS en Chile...", px + 28, yy + 8, 11, {80,90,105,255});
+    if (CheckCollisionPointRec(GetMousePosition(), {(float)px + 20, (float)yy, (float)(pw - 40), 30}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        taskInputActive = true;
+    else if (!CheckCollisionPointRec(GetMousePosition(), {(float)px + 20, (float)yy, (float)(pw - 40), 30}) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        taskInputActive = false;
+    yy += 40;
+
+    // Selector de agente
+    DrawText("Asignar a:", px + 20, yy + 4, 12, {148,163,184,255});
+    int btnX = px + 100;
+    for (int i = 0; i < (int)entities.size(); i++) {
+        if (entities[i].type == EntityType::Human) continue;
+        Rectangle btn = {(float)btnX, (float)yy, 80, 28};
+        bool sel = (taskAssignTarget == entities[i].id);
+        bool hover = CheckCollisionPointRec(GetMousePosition(), btn);
+        DrawRectangleRounded(btn, 0.15f, 4, sel ? alpha(entities[i].color, 80) : alpha(WHITE, hover ? 12 : 5));
+        DrawRectangleRoundedLines(btn, 0.15f, 4, sel ? entities[i].color : alpha(WHITE, 20));
+        const char* shortName = entities[i].name.c_str();
+        if (strlen(shortName) > 8) {
+            // Usar nombre corto
+            if (entities[i].type == EntityType::CodeBot) shortName = "CodeBot";
+            else if (entities[i].type == EntityType::DataBot) shortName = "DataBot";
+            else if (entities[i].type == EntityType::Orchestrator) shortName = "Orch.";
+        }
+        DrawText(shortName, btn.x + 10, btn.y + 7, 10, WHITE);
+        if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            taskAssignTarget = entities[i].id;
+        btnX += 88;
+    }
+    yy += 40;
+
+    // Botón crear
+    Rectangle btnCreate = {(float)px + 20, (float)yy, 160, 34};
+    if (drawButton(btnCreate, "+ CREAR TAREA", {245,158,11,200}, 13)) {
+        if (strlen(taskInput) > 3 && taskAssignTarget >= 0) {
+            Task t;
+            t.id = g_nextTaskId++;
+            t.description = taskInput;
+            t.assignedTo = taskAssignTarget;
+            t.status = TaskStatus::Pending;
+            t.createdAt = GetTime();
+            g_tasks.push_back(t);
+            taskInput[0] = '\0';
+            taskInputActive = false;
+        }
+    }
+    yy += 50;
+
+    // Lista de tareas
+    DrawText("TAREAS ACTIVAS", px + 20, yy, 13, {148,163,184,255});
+    yy += 22;
+
+    int listH = py + ph - yy - 16;
+    DrawRectangle(px + 12, yy, pw - 24, listH, alpha(BLACK, 100));
+    DrawRectangleLines(px + 12, yy, pw - 24, listH, alpha(WHITE, 15));
+
+    int entryY = yy + 8;
+    int maxEntries = listH - 16;
+    int startIdx = std::max(0, (int)g_tasks.size() - 12);
+
+    for (int i = startIdx; i < (int)g_tasks.size(); i++) {
+        if (entryY - yy > maxEntries) break;
+        auto& t = g_tasks[i];
+
+        // Fila
+        DrawRectangle(px + 14, entryY - 2, pw - 28, 30, alpha(WHITE, 4));
+
+        // Estado (punto de color)
+        Color sc = taskStatusColor(t.status);
+        DrawCircle(px + 22, entryY + 8, 4, sc);
+        DrawText(taskStatusStr(t.status), px + 32, entryY + 2, 9, sc);
+
+        // ID
+        DrawText(TextFormat("#%d", t.id), px + 130, entryY + 2, 9, {100,116,139,255});
+
+        // Descripción (truncada)
+        std::string desc = t.description;
+        if ((int)desc.size() > 45) desc = desc.substr(0, 42) + "...";
+        DrawText(desc.c_str(), px + 165, entryY + 2, 10, WHITE);
+
+        // Agente asignado
+        const char* agentName = "?";
+        for (auto& e : entities) if (e.id == t.assignedTo) agentName = e.name.c_str();
+        DrawText(agentName, px + 380, entryY + 2, 9, {148,163,184,255});
+
+        // Resultado si está completada
+        if (t.status == TaskStatus::Done || t.status == TaskStatus::Failed) {
+            std::string res = t.result;
+            if ((int)res.size() > 60) res = res.substr(0, 57) + "...";
+            DrawText(res.c_str(), px + 32, entryY + 16, 9, sc);
+        }
+
+        // Pasos si en progreso
+        if (t.status == TaskStatus::InProgress && !t.steps.empty()) {
+            std::string lastStep = t.steps.back();
+            if ((int)lastStep.size() > 50) lastStep = lastStep.substr(0, 47) + "...";
+            DrawText(lastStep.c_str(), px + 32, entryY + 16, 9, {56,189,248,180});
+        }
+
+        entryY += 34;
+    }
+
+    if (g_tasks.empty()) {
+        DrawText("No hay tareas. Crea una arriba.", px + 28, yy + 20, 11, {100,116,139,255});
+    }
+
+    // Input handling
+    if (taskInputActive) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            size_t len = strlen(taskInput);
+            if (len < sizeof(taskInput) - 1 && key >= 32 && key <= 126) {
+                taskInput[len] = (char)key;
+                taskInput[len+1] = '\0';
+            }
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE)) {
+            size_t len = strlen(taskInput);
+            if (len > 0) taskInput[len-1] = '\0';
+        }
+    }
+}
+
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
             int selectedId, bool paused) {
     // ===== TOP BAR con degradado =====
@@ -353,7 +542,19 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     DrawText(paused ? "PAUSADO" : "EN TIEMPO REAL", screenW - 248, 12, 12,
              paused ? ORANGE : GREEN);
 
-    Rectangle btnConfig = {(float)screenW - 170, 8, 40, 34};
+    Rectangle btnTasks = {(float)screenW - 300, 8, 80, 34};
+    bool tasksHover = CheckCollisionPointRec(GetMousePosition(), btnTasks);
+    int activeTasks = 0;
+    for (auto& t : g_tasks) if (t.status == TaskStatus::Pending || t.status == TaskStatus::InProgress) activeTasks++;
+    DrawRectangleRounded(btnTasks, 0.2f, 4, g_showTaskPanel ? alpha({245,158,11,255}, 60) : alpha(WHITE, tasksHover ? 15 : 8));
+    DrawRectangleRoundedLines(btnTasks, 0.2f, 4, g_showTaskPanel ? (Color){245,158,11,200} : alpha(WHITE, 30));
+    DrawText("TAREAS", btnTasks.x + 8, btnTasks.y + 9, 12, WHITE);
+    if (activeTasks > 0)
+        DrawText(TextFormat("(%d)", activeTasks), btnTasks.x + 58, btnTasks.y + 4, 10, {245,158,11,255});
+    if (tasksHover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        g_showTaskPanel = !g_showTaskPanel;
+
+    Rectangle btnConfig = {(float)screenW - 204, 8, 40, 34};
     bool configHover = CheckCollisionPointRec(GetMousePosition(), btnConfig);
     DrawRectangleRounded(btnConfig, 0.2f, 4, g_showLlmConfig ? alpha({56,189,248,255}, 60) : alpha(WHITE, configHover ? 15 : 8));
     DrawRectangleRoundedLines(btnConfig, 0.2f, 4, g_showLlmConfig ? (Color){56,189,248,200} : alpha(WHITE, 30));
@@ -462,11 +663,18 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
     drawLlmConfigPanel();
     drawChatPanel(entities);
     drawLogPanel(entities);
+    drawTaskPanel(entities);
 }
 
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
                  int& selectedId, bool& paused, float& panY) {
     // Si el log panel está abierto, solo ESC para cerrar
+    // Si el task panel esta abierto
+    if (g_showTaskPanel) {
+        if (IsKeyPressed(KEY_ESCAPE)) closeTaskPanel();
+        return;
+    }
+
     if (g_showLog) {
         if (IsKeyPressed(KEY_ESCAPE)) closeLogPanel();
         // Click en botón cerrar del log panel se maneja en drawLogPanel
@@ -546,7 +754,19 @@ void handleInput(std::vector<Entity>& entities, Vector2& origin,
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Vector2 mp = GetMousePosition();
 
-        Rectangle btnConfig = {(float)screenW - 170, 8, 40, 34};
+        Rectangle btnTasks = {(float)screenW - 300, 8, 80, 34};
+    bool tasksHover = CheckCollisionPointRec(GetMousePosition(), btnTasks);
+    int activeTasks = 0;
+    for (auto& t : g_tasks) if (t.status == TaskStatus::Pending || t.status == TaskStatus::InProgress) activeTasks++;
+    DrawRectangleRounded(btnTasks, 0.2f, 4, g_showTaskPanel ? alpha({245,158,11,255}, 60) : alpha(WHITE, tasksHover ? 15 : 8));
+    DrawRectangleRoundedLines(btnTasks, 0.2f, 4, g_showTaskPanel ? (Color){245,158,11,200} : alpha(WHITE, 30));
+    DrawText("TAREAS", btnTasks.x + 8, btnTasks.y + 9, 12, WHITE);
+    if (activeTasks > 0)
+        DrawText(TextFormat("(%d)", activeTasks), btnTasks.x + 58, btnTasks.y + 4, 10, {245,158,11,255});
+    if (tasksHover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        g_showTaskPanel = !g_showTaskPanel;
+
+    Rectangle btnConfig = {(float)screenW - 204, 8, 40, 34};
         if (CheckCollisionPointRec(mp, btnConfig)) {
             toggleLlmConfig();
             return;

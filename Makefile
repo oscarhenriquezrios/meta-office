@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++20 -Wall -Wextra -O2 $(shell pkg-config --cflags raylib)
 LIBS = $(shell pkg-config --libs raylib) -lm -lpthread -lcurl
-SRC = src/main.cpp src/render.cpp src/agents.cpp src/ui.cpp src/network.cpp src/llm_client.cpp
+SRC = src/main.cpp src/render.cpp src/agents.cpp src/ui.cpp src/network.cpp src/llm_client.cpp src/tasks.cpp
 OBJ = $(SRC:.cpp=.o)
 TARGET = meta-office
 

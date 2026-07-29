@@ -12,6 +12,7 @@ std::vector<std::pair<std::string, std::string>> g_chatHistory;
 std::string g_chatInput;
 bool g_showLog = false;
 int g_logTargetId = -1;
+// Tareas — definidos en tasks.cpp
 
 // Cola de LLM async
 std::queue<LlmRequest> g_llmQueue;
@@ -199,6 +200,13 @@ void initSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs) 
     logs.push_back({"Simulacion de Oficina Virtual iniciada.", GetTime(), {56,189,248,255}});
     logs.push_back({"CodeBot listo en Area de Desarrollo.", GetTime(), {56,189,248,255}});
     logs.push_back({"DataBot conectado a data warehouse.", GetTime(), {16,185,129,255}});
+
+    // Cargar memoria persistente
+    loadMemory(entities);
+    loadTasks();
+    for (auto& t : g_tasks) {
+        if (t.status == TaskStatus::InProgress) t.status = TaskStatus::Pending;
+    }
 }
 
 // Encola una peticion LLM (no bloquea)
@@ -349,17 +357,62 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
         g_llmResults.clear();
     }
 
-    // Limpiar speech bubbles expirados o si el chat se cerró
+// Limpiar speech bubbles expirados o si el chat se cerró
     for (auto& e : entities) {
         if (!e.speech.text.empty()) {
-            // Limpiar si expiró o si no hay chat activo con este agente
-            // (excepto mensajes del sistema como bugs)
             bool isSystemMsg = (e.speech.text.find("Bug") != std::string::npos ||
                                e.speech.text.find("Voy a reparar") != std::string::npos ||
-                               e.speech.text.find("reparado") != std::string::npos);
+                               e.speech.text.find("reparado") != std::string::npos ||
+                               e.speech.text.find("Tarea") != std::string::npos ||
+                               e.speech.text.find("Trabajando") != std::string::npos ||
+                               e.speech.text.find("Navegando") != std::string::npos);
             if (time > e.speech.expiry || (!isSystemMsg && !(g_showChat && g_chatTargetId == e.id))) {
                 e.speech.text.clear();
             }
+        }
+    }
+
+    // ============================================================
+    // Procesar tareas asignadas (multi-turn, no bloquea el frame)
+    // ============================================================
+    static double lastTaskProcess = 0;
+    if (time - lastTaskProcess > 2.0) {  // cada 2 segundos
+        lastTaskProcess = time;
+        for (auto& task : g_tasks) {
+            if (task.status != TaskStatus::InProgress) continue;
+            // Buscar el agente asignado
+            Entity* agent = nullptr;
+            for (auto& e : entities) {
+                if (e.id == task.assignedTo) { agent = &e; break; }
+            }
+            if (!agent) { task.status = TaskStatus::Failed; task.result = "Agente no encontrado"; continue; }
+
+            // Procesar un step de la tarea
+            processTaskStep(task, *agent, logs);
+        }
+    }
+
+    // Auto-asignar tareas pendientes a agentes disponibles
+    for (auto& task : g_tasks) {
+        if (task.status != TaskStatus::Pending) continue;
+        if (task.assignedTo < 0) continue; // necesita asignación manual
+
+        Entity* agent = nullptr;
+        for (auto& e : entities) {
+            if (e.id == task.assignedTo && !e.isActive && !e.hasCriticalError) {
+                agent = &e; break;
+            }
+        }
+        if (agent) {
+            task.status = TaskStatus::InProgress;
+            task.createdAt = time;
+            agent->isActive = true;
+            agent->currentTask = task.description;
+            agent->currentTaskId = task.id;
+            agent->status = Status::Busy;
+            agent->speech = {"Iniciando tarea...", time + 5.0};
+            logs.push_back({TextFormat("%s inicia tarea #%d", agent->name.c_str(), task.id),
+                           GetTime(), agent->color});
         }
     }
 

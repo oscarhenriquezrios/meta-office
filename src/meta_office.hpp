@@ -20,7 +20,6 @@ constexpr int TILE_H = 32;
 constexpr int GRID_W = 16;
 constexpr int GRID_H = 16;
 
-// Tamaño dinámico de pantalla (se actualiza al redimensionar)
 extern int screenW;
 extern int screenH;
 
@@ -36,6 +35,36 @@ struct LogEntry {
     std::string text;
     double time;
     Color color;
+};
+
+// ============================================================
+// Sistema de Tareas
+// ============================================================
+enum class TaskStatus { Pending, InProgress, Done, Failed };
+
+struct Task {
+    int id = 0;
+    std::string description;
+    int assignedTo = -1;       // entity ID
+    TaskStatus status = TaskStatus::Pending;
+    std::string result;
+    double createdAt = 0;
+    double completedAt = 0;
+    std::vector<std::string> steps;  // log de pasos ejecutados
+    // Multi-turn LLM context
+    std::vector<LLMMessage> context;
+    bool needsProcessing = false;
+    int turnCount = 0;
+};
+
+// ============================================================
+// Memoria persistente por agente
+// ============================================================
+struct AgentMemory {
+    int entityId = 0;
+    std::vector<std::string> facts;       // cosas que aprendió
+    std::vector<std::string> pastTasks;   // descripciones de tareas completadas
+    std::vector<std::string> conversations; // resúmenes de charlas
 };
 
 struct Entity {
@@ -56,30 +85,27 @@ struct Entity {
     bool hasGreetedHuman = false;
     bool isIntervening = false;
     double repairStartTime = 0;
-    // Log individual del agente
     std::vector<LogEntry> agentLog;
-    // Si está activo (trabajando en una tarea asignada)
     bool isActive = false;
     std::string currentTask;
+    int currentTaskId = -1;
+    AgentMemory memory;
 };
 
 // Forward declarations
 Vector2 gridToIso(float gx, float gy, Vector2 origin);
 Vector2 isoToGrid(float sx, float sy, Vector2 origin);
 
-// Helper
 inline Color alpha(Color c, int a) { return {c.r, c.g, c.b, (unsigned char)a}; }
 
 // Config LLM global
 extern LLMConfig g_llmConfig;
-
-// Menu de config LLM
 extern bool g_showLlmConfig;
 void saveLlmConfig();
 
 // Cola de LLM async
 struct LlmRequest {
-    int entityId;          // -1 si no es para una entidad
+    int entityId;
     std::string systemPrompt;
     std::string userMessage;
     double expiryTime;
@@ -109,7 +135,7 @@ void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& lo
 void handleInput(std::vector<Entity>& entities, Vector2& origin,
                  int& selectedId, bool& paused, float& panY);
 
-// Chat interactivo con agentes
+// Chat
 extern bool g_showChat;
 extern int g_chatTargetId;
 extern std::vector<std::pair<std::string, std::string>> g_chatHistory;
@@ -117,8 +143,30 @@ extern std::string g_chatInput;
 void openChat(int entityId);
 void closeChat();
 
-// Log panel (ver log de un agente)
+// Log panel
 extern bool g_showLog;
 extern int g_logTargetId;
 void openLogPanel(int entityId);
 void closeLogPanel();
+
+// ============================================================
+// Tareas — globals y funciones
+// ============================================================
+extern std::vector<Task> g_tasks;
+extern int g_nextTaskId;
+extern bool g_showTaskPanel;
+extern int g_taskPanelTargetId; // -1 = panel general, >0 = asignar a este agente
+void openTaskPanel(int entityId);
+void closeTaskPanel();
+
+// Web fetch (curl)
+std::string webFetch(const std::string& url);
+
+// Procesar una tarea (multi-turn con tools)
+void processTaskStep(Task& task, Entity& agent, std::vector<LogEntry>& logs);
+
+// Memoria persistente
+void saveMemory(const std::vector<Entity>& entities);
+void loadMemory(std::vector<Entity>& entities);
+void saveTasks();
+void loadTasks();
