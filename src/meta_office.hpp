@@ -121,6 +121,9 @@ extern LLMConfig g_llmConfig;
 extern bool g_showLlmConfig;
 void saveLlmConfig();
 
+// 3D Camera global
+inline Camera3D g_camera3D;
+
 // Cola de LLM async
 struct LlmRequest {
     int entityId;
@@ -150,6 +153,8 @@ void updateSimulation(std::vector<Entity>& entities, std::vector<LogEntry>& logs
                       bool paused, double dt, double time);
 
 void drawScene(const std::vector<Entity>& entities, Vector2 origin, double time);
+void drawScene3D(const std::vector<Entity>& entities, Camera3D& camera, double time);
+void drawEntity3D(const Entity& e, double time);
 void unloadTextures();
 void drawUI(const std::vector<Entity>& entities, const std::vector<LogEntry>& logs,
             int selectedId, bool paused);

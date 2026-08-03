@@ -28,6 +28,16 @@ int main() {
 
     initSimulation(entities, logs);
 
+    // Cámara 3D inicial
+    Camera3D camera = {0};
+    camera.position = {16.0f, 18.0f, 28.0f};
+    camera.target = {16.0f, 0.0f, 16.0f};
+    camera.up = {0.0f, 1.0f, 0.0f};
+    camera.fovy = 45.0f;
+    camera.projection = CAMERA_PERSPECTIVE;
+
+    bool mode3D = false; // F3 para alternar entre 2D iso y 3D
+
     while (!WindowShouldClose()) {
         double time = GetTime();
         float dt = GetFrameTime();
@@ -50,14 +60,33 @@ int main() {
             origin.y = (float)screenH / 5 + panY;
         }
 
+        // Alternar 2D / 3D con F3
+        if (IsKeyPressed(KEY_F3)) {
+            mode3D = !mode3D;
+        }
+
+        // Rotar cámara 3D con flechas si estamos en modo 3D
+        if (mode3D) {
+            if (IsKeyDown(KEY_LEFT)) camera.position.x -= 10.0f * dt;
+            if (IsKeyDown(KEY_RIGHT)) camera.position.x += 10.0f * dt;
+            if (IsKeyDown(KEY_UP)) camera.position.z -= 10.0f * dt;
+            if (IsKeyDown(KEY_DOWN)) camera.position.z += 10.0f * dt;
+        }
+
         handleInput(entities, origin, selectedId, paused, panY);
         updateSimulation(entities, logs, paused, dt, time);
 
         BeginDrawing();
-        // El fondo degradado se dibuja en drawScene
         ClearBackground({9, 13, 22, 255});
 
-        drawScene(entities, origin, time);
+        if (mode3D) {
+            drawScene3D(entities, camera, time);
+            DrawText("MODO 3D (F3 para volver a 2D) | Flechas: mover camara", 20, 20, 16, YELLOW);
+        } else {
+            drawScene(entities, origin, time);
+            DrawText("MODO 2D ISO (F3 para activar 3D)", 20, 20, 16, GREEN);
+        }
+
         drawUI(entities, logs, selectedId, paused);
 
         DrawFPS(10, screenH - 65);

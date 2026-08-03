@@ -562,6 +562,100 @@ static void drawFurnitureShadow(Vector2 pos, float w, float h) {
 // ============================================================
 // Public drawScene
 // ============================================================
+// ============================================================
+// Render de Entidades en 3D (Fase 2)
+// ============================================================
+void drawEntity3D(const Entity& e, double time) {
+    // Convertir coordenadas de grilla (x, y) a mundo 3D (X, Z)
+    // 1 celda = 2.0 unidades
+    float wx = e.renderX * 2.0f + 1.0f;
+    float wz = e.renderY * 2.0f + 1.0f;
+    float wy = 0.75f; // altura del centro del avatar
+
+    // Efecto sutil de flotación/respiración
+    float bob = sinf(time * 4.0f + e.id * 1.5f) * 0.05f;
+
+    // Cuerpo principal (Cápsula o Cilindro según rol)
+    Vector3 pos = {wx, wy + bob, wz};
+    
+    if (e.type == EntityType::Human) {
+        // Humano supervisor: Cubo/Cápsula dorada
+        DrawCylinder(pos, 0.4f, 0.4f, 1.4f, 16, e.color);
+        DrawCylinderWires(pos, 0.4f, 0.4f, 1.4f, 16, BLACK);
+    } else {
+        // Bots: Cilindros con indicador de estado superior
+        Color col = e.color;
+        if (e.hasCriticalError || e.status == Status::Error) col = RED;
+        else if (e.status == Status::Busy) col = ORANGE;
+
+        DrawCylinder(pos, 0.35f, 0.35f, 1.2f, 16, col);
+        DrawCylinderWires(pos, 0.35f, 0.35f, 1.2f, 16, BLACK);
+
+        // Anillo superior flotante indicador
+        Vector3 ringPos = {wx, wy + 0.75f + bob, wz};
+        DrawRing(Vector2{ringPos.x, ringPos.z}, 0.4f, 0.5f, 0, 360, 1, alpha(col, 180));
+    }
+
+    // Nombre flotante sobre la cabeza
+    Vector3 textPos = {wx, wy + 1.1f + bob, wz};
+    // Proyectar a pantalla para dibujar texto limpio o usar Billboard si se prefiere
+    // Por simplicidad en raylib 3D, usamos un billboard o texto en pantalla proyectado
+    Vector2 screenPos = GetWorldToScreen(textPos, g_camera3D); // nota: usaremos la cámara activa
+    (void)screenPos;
+}
+
+// ============================================================
+// Render 3D (Fase 1 y 2)
+// ============================================================
+void drawScene3D(const std::vector<Entity>& entities, Camera3D& camera, double time) {
+    // Guardar referencia global de cámara para proyecciones
+    g_camera3D = camera;
+
+    BeginMode3D(camera);
+
+    // Suelo de la oficina (16x16 celdas, cada celda 2.0x2.0 unidades)
+    float mapSize = 16.0f * 2.0f;
+    DrawPlane({mapSize / 2.0f - 1.0f, 0.0f, mapSize / 2.0f - 1.0f}, {mapSize, mapSize}, {22, 27, 38, 255});
+    DrawGrid(16, 2.0f);
+
+    // Zonas de la oficina en 3D
+    DrawCube({7.0f, 0.02f, 7.0f}, 14.0f, 0.05f, 14.0f, {56, 189, 248, 25});
+    DrawCube({23.0f, 0.02f, 7.0f}, 14.0f, 0.05f, 14.0f, {16, 185, 129, 25});
+    DrawCube({7.0f, 0.02f, 23.0f}, 14.0f, 0.05f, 14.0f, {168, 85, 247, 25});
+    DrawCube({23.0f, 0.02f, 23.0f}, 14.0f, 0.05f, 14.0f, {245, 158, 11, 25});
+
+    // Dibujar todas las entidades en 3D
+    for (const auto& e : entities) {
+        drawEntity3D(e, time);
+    }
+
+    EndMode3D();
+
+    // Dibujar etiquetas 2D proyectadas (nombres y burbujas)
+    for (const auto& e : entities) {
+        float wx = e.renderX * 2.0f + 1.0f;
+        float wz = e.renderY * 2.0f + 1.0f;
+        Vector3 textPos = {wx, 2.2f, wz};
+        Vector2 screenPos = GetWorldToScreen(textPos, camera);
+        
+        if (screenPos.x > 0 && screenPos.y > 0 && screenPos.x < screenW && screenPos.y < screenH) {
+            const char* roleName = e.name.c_str();
+            int tw = MeasureText(roleName, 12);
+            DrawRectangle((int)screenPos.x - tw/2 - 6, (int)screenPos.y - 12, tw + 12, 20, alpha(BLACK, 200));
+            DrawText(roleName, (int)screenPos.x - tw/2, (int)screenPos.y - 9, 12, e.color);
+
+            // Burbuja de diálogo si está activa
+            if (e.speech.expiry > time && !e.speech.text.empty()) {
+                std::string bubble = e.speech.text;
+                if (bubble.size() > 50) bubble = bubble.substr(0, 47) + "...";
+                int bw = MeasureText(bubble.c_str(), 10);
+                DrawRectangle((int)screenPos.x - bw/2 - 8, (int)screenPos.y - 38, bw + 16, 22, alpha(DARKGRAY, 220));
+                DrawText(bubble.c_str(), (int)screenPos.x - bw/2, (int)screenPos.y - 35, 10, WHITE);
+            }
+        }
+    }
+}
+
 void drawScene(const std::vector<Entity>& entities, Vector2 origin, double time) {
     drawBackground(time);
     if (!texturesLoaded) initTextures();
